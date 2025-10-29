@@ -41,6 +41,7 @@
     "react-native-screens": "^4.16.0",
     "react-native-shimmer-placeholder": "^2.0.9",
     "react-native-svg": "^15.14.0",
+    "react-native-switch-toggle": "^2.2.1",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-vector-icons": "^10.3.0",
     "rn-tourguide": "^3.3.2",
