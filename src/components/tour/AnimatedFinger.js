@@ -123,7 +123,7 @@
 
 // src/components/tour/AnimatedFinger.js
 import React, { useEffect } from 'react';
-import { Text } from 'react-native';
+import { Text, Dimensions,Image } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -133,12 +133,15 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 
+const { width, height } = Dimensions.get('window');
+
 const AnimatedFinger = ({ direction, visible }) => {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
+    console.log('AnimatedFinger - visible:', visible, 'direction:', direction);
     if (!visible) {
       opacity.value = withTiming(0, { duration: 200 });
       translateX.value = 0;
@@ -148,7 +151,7 @@ const AnimatedFinger = ({ direction, visible }) => {
 
     opacity.value = withTiming(1, { duration: 300 });
 
-    const distance = 100; // Increased from 80
+    const distance = 100;
     const duration = 1200;
 
     switch (direction) {
@@ -217,18 +220,19 @@ const AnimatedFinger = ({ direction, visible }) => {
       style={[
         {
           position: 'absolute',
-          top: 50,
-          left: 50,
-          marginLeft: -25, // Center the emoji
-          marginTop: -25,
-          zIndex: 99999, // ⚠️ CRITICAL: Must be above tour backdrop
-          elevation: 99999, // ⚠️ Android elevation
+          top: height / 2 - 50, // Center vertically
+          left: width / 2 - 50, // Center horizontally
+          zIndex: 99999,
+          elevation: 99999,
         },
         animatedStyle,
       ]}
       pointerEvents="none"
     >
-      <Text style={{ fontSize: 50 }}>👆</Text>
+      <Image
+        source={require('../../assets/finger.png')}
+        style={{ width: 100, height: 100, tintColor: '#5fd4f7' }}
+      />
     </Animated.View>
   );
 };
