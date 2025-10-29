@@ -160,7 +160,7 @@ function ProductDiscoveryContent({ navigation, route }) {
         }, 800);
       }
     };
-    // resetTour(TOUR_KEYS.PRODUCT_DISCOVERY); 
+    // resetTour(TOUR_KEYS.PRODUCT_DISCOVERY);
     checkAndStartTour();
   }, [frontProduct, canStart, start]);
 
@@ -248,18 +248,14 @@ function ProductDiscoveryContent({ navigation, route }) {
     const wasInWishlist =
       isInWishlist(productId) || optimisticWishlist.has(productId);
 
-    if (!wasInWishlist) {
-      setOptimisticWishlist(prev => new Set([...prev, productId]));
-      heartRef.current?.animate();
-      await toggleWishlist(frontProduct);
-      setOptimisticWishlist(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(productId);
-        return newSet;
-      });
-    } else {
-      navigation.navigate('WishlistScreen');
-    }
+    !wasInWishlist && heartRef.current?.animate();
+    setOptimisticWishlist(prev => new Set([...prev, productId]));
+    await toggleWishlist(frontProduct);
+    setOptimisticWishlist(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(productId);
+      return newSet;
+    });
   };
 
   const handleSwipeWishlist = async () => {
@@ -741,11 +737,7 @@ function ProductDiscoveryContent({ navigation, route }) {
 export default function ProductDiscoveryScreen({ navigation, route }) {
   return (
     <TourGuideProvider
-      tooltipComponent={props => (
-        <CustomTooltip
-          {...props}
-        />
-      )}
+      tooltipComponent={props => <CustomTooltip {...props} />}
       androidStatusBarVisible={true}
       preventOutsideInteraction={true}
       {...{
