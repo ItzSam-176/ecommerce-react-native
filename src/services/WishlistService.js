@@ -74,8 +74,19 @@ export class WishlistService {
             name,
             price,
             description,
-            image_url,
-            quantity
+            quantity,
+            product_categories (
+              category_id,
+              category:category_id (
+                id,
+                name
+              )
+            ),
+            product_images (
+              id,
+              image_url,
+              display_order
+            )
           )
         `,
         )

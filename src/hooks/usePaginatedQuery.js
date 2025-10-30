@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from 'react';
 import { supabase } from '../supabase/supabase';
 
@@ -20,15 +19,20 @@ export function usePaginatedQuery(
     switch (tableName) {
       case 'products':
         return `
-          *,
-          product_categories (
-            category_id,
-            category (
-              id,
-              name
-            )
+        *,
+        product_categories (
+          category_id,
+          category (
+            id,
+            name
           )
-        `;
+        ),
+        product_images (          
+          id,                     
+          image_url,              
+          display_order           
+        )                         
+      `;
       case 'category':
         return '*';
       default:

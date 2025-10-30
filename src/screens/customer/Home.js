@@ -33,6 +33,8 @@ import ScrollToTopButton from '../../components/shared/ScrollToTopButton';
 import ShimmerProductsCard from '../../components/shimmer/ShimmerProductsCard';
 import ShimmerPlaceholder from 'react-native-shimmer-placeholder';
 import { getProductViewMode } from '../../utils/userPreferences';
+import { getProductPrimaryImage } from '../../utils/productImageHelper';
+
 
 const { width: screenWidth, height } = Dimensions.get('window');
 
@@ -189,9 +191,10 @@ export default function Home({ navigation, route }) {
 
   const mappedProducts = useMemo(() => {
     if (!products) return [];
+    
 
     const mapped = products.map(p => {
-      const imageUri = p.image_url || p.imageurl || p.image || null;
+      const imageUri = getProductPrimaryImage(p);
 
       return {
         id: p.id,

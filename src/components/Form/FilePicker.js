@@ -2,15 +2,39 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 
-const FilePicker = ({ fileName, onPick, placeholder = 'No file chosen' }) => {
+const FilePicker = ({
+  fileName,
+  onPick,
+  placeholder = 'No file chosen',
+  disabled = false, // ✅ New prop
+}) => {
   return (
-    <View style={styles.container}>
-      <Text style={styles.fileName} numberOfLines={1}>
+    <View
+      style={[
+        styles.container,
+        disabled && styles.disabledContainer, // ✅ Disabled style
+      ]}
+    >
+      <Text
+        style={[
+          styles.fileName,
+          disabled && styles.disabledText, // ✅ Disabled text
+        ]}
+        numberOfLines={1}
+      >
         {fileName || placeholder}
       </Text>
-      <TouchableOpacity onPress={onPick} activeOpacity={0.8}>
+      <TouchableOpacity
+        onPress={disabled ? undefined : onPick} // ✅ No-op if disabled
+        activeOpacity={disabled ? 1 : 0.8}
+        disabled={disabled} // ✅ Disable touch
+      >
         <LinearGradient
-          colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
+          colors={
+            disabled
+              ? ['#666', '#555', '#444'] // ✅ Gray gradient when disabled
+              : ['#5fd4f7', '#4fc3f7', '#3aa5c7']
+          }
           style={styles.button}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -36,6 +60,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     backgroundColor: '#2a3847',
   },
+  disabledContainer: {
+    opacity: 0.9, // ✅ Dim when disabled
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
   fileName: {
     flex: 1,
     paddingHorizontal: 12,
@@ -46,6 +74,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 10,
     borderBottomLeftRadius: 10,
     minHeight: 50,
+  },
+  disabledText: {
+    color: '#999', // ✅ Gray text when disabled
   },
   button: {
     paddingVertical: 14,

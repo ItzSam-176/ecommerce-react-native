@@ -25,7 +25,6 @@ import LinearGradient from 'react-native-linear-gradient';
 import { usePaginatedQuery } from '../../hooks/usePaginatedQuery';
 import { useWishlist } from '../../hooks/useWishlist';
 import { useCart } from '../../hooks/useCart';
-import ProductDetailsBottomSheet from '../../components/customer/ProductDetailsBottomSheet';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useFocusEffect } from '@react-navigation/native';
 import ShimmerDiscovery from '../../components/shimmer/ShimmerDiscovery';
@@ -45,6 +44,7 @@ import {
   resetTour,
 } from '../../utils/tourGuideHelper';
 import ProductInfoBottomSheet from '../../components/customer/ProductInfoBottomSheet';
+import { getProductPrimaryImage } from '../../utils/productImageHelper';
 
 const { width, height } = Dimensions.get('window');
 const CARD_WIDTH = width * 1;
@@ -247,7 +247,7 @@ function ProductDiscoveryContent({ navigation, route }) {
     }
   }, [index, hasMore, loadingInitial, loadingMore, allProducts?.length]);
 
-  const getImageUrl = p => p?.image_url;
+  const getImageUrl = p => getProductPrimaryImage(p);
 
   const handleHeartPress = async () => {
     if (!frontProduct) return;
@@ -727,16 +727,6 @@ function ProductDiscoveryContent({ navigation, route }) {
           </View>
         ) : null}
 
-        {/* <ProductDetailsBottomSheet
-          product={frontProduct}
-          visible={bottomSheetVisible}
-          onClose={() => setBottomSheetVisible(false)}
-          onAddToWishlist={() => toggleWishlist(frontProduct)}
-          onAddToCart={() => addToCart(frontProduct)}
-          isInWishlist={frontProduct ? isInWishlist(frontProduct.id) : false}
-          isInCart={frontProduct ? isInCart(frontProduct.id) : false}
-          navigation={navigation}
-        /> */}
         <ProductInfoBottomSheet
           ref={bottomSheetRef}
           product={frontProduct}

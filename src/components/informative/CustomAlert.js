@@ -115,17 +115,20 @@ const CustomAlert = ({
     }
   };
 
-  const renderButtons = () => {
-    const alertButtons = getDefaultButtons();
+const renderButtons = () => {
+  const alertButtons = getDefaultButtons();
 
-    return (
-      <View style={styles.buttonContainer}>
-        {alertButtons.map((button, index) => {
-          // Cancel button styling (only for multi-button alerts)
-          if (button.style === 'cancel' && alertButtons.length > 1) {
-            return (
+  return (
+    <View style={styles.buttonContainer}>
+      {alertButtons.map((button, index) => {
+        const isTwoButtons = alertButtons.length === 2;
+
+        // Cancel button styling (only for multi-button alerts)
+        if (button.style === 'cancel' && isTwoButtons) {
+          return (
+            <View key={index} style={{ flex: 1 }}>
+              {/* ✅ ADD WRAPPER */}
               <TouchableOpacity
-                key={index}
                 style={[styles.button, styles.cancelButton]}
                 onPress={button.onPress}
                 activeOpacity={0.7}
@@ -134,63 +137,58 @@ const CustomAlert = ({
                   {button.text}
                 </Text>
               </TouchableOpacity>
-            );
-          }
+            </View>
+          );
+        }
 
-          // Destructive button styling
-          if (button.style === 'destructive') {
-            return (
-              <TouchableOpacity
-                key={index}
-                onPress={button.onPress}
-                activeOpacity={0.8}
-              >
+        // Destructive button styling
+        if (button.style === 'destructive') {
+          return (
+            <View key={index} style={{ flex: 1 }}>
+              
+              {/* ✅ WRAPPER */}
+              <TouchableOpacity onPress={button.onPress} activeOpacity={0.8}>
                 <LinearGradient
                   colors={['#ff5c6d', '#ff4458', '#e63946']}
-                  style={[
-                    styles.button,
-                    alertButtons.length === 1 && { flex: 1 },
-                  ]}
+                  style={styles.button}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
                   <Text style={styles.buttonText}>{button.text}</Text>
                 </LinearGradient>
               </TouchableOpacity>
-            );
-          }
+            </View>
+          );
+        }
 
-          // Default button styling (gradient)
-          return (
-            <TouchableOpacity
-              key={index}
-              onPress={button.onPress}
-              activeOpacity={0.8}
-              style={{ flex: 1, minHeight: 50 }}
-            >
+        // Default button styling (gradient)
+        return (
+          <View key={index} style={{ flex: 1 }}>
+            
+            {/* ✅ WRAPPER */}
+            <TouchableOpacity onPress={button.onPress} activeOpacity={0.8}>
               <LinearGradient
                 colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
-                style={[
-                  styles.button,
-                  alertButtons.length === 1 && { flex: 1 },
-                ]}
+                style={styles.button}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
                 <Text style={styles.buttonText}>{button.text}</Text>
               </LinearGradient>
             </TouchableOpacity>
-          );
-        })}
-      </View>
-    );
-  };
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
 
   return (
     <Modal
       transparent
       visible={visible}
-      animationType="none"
+      animationType={animationType}
       onRequestClose={dismissible ? onBackdropPress : undefined}
       statusBarTranslucent
     >
@@ -293,7 +291,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   button: {
-    flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -306,9 +303,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'rgba(0, 0, 0, 0.15)',
   },
-  singleButton: {
-    flex: 1,
-  },
+  singleButton: {},
   cancelButton: {
     backgroundColor: '#4fc3f7',
     borderWidth: 1,

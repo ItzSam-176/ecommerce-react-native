@@ -19,6 +19,7 @@ import { useAlert } from '../../components/informative/AlertProvider';
 import { useToastify } from '../../hooks/useToastify';
 import ShimmerProductsCard from '../../components/shimmer/ShimmerProductsCard';
 import formatCurrency from '../../utils/formatCurrency';
+import { getProductPrimaryImage } from '../../utils/productImageHelper';
 
 export default function WishlistScreen({ navigation }) {
   const { showAlert, showConfirm } = useAlert();
@@ -123,14 +124,15 @@ export default function WishlistScreen({ navigation }) {
 
   const renderWishlistItem = ({ item }) => {
     const isLoading = loadingItems.has(item.id);
+    const productImage = getProductPrimaryImage(item.products);
 
     return (
       <View style={styles.wishlistItem}>
         <View style={styles.topSection}>
           <View style={styles.productImageContainer}>
-            {item.products.image_url ? (
+            {productImage ? (
               <Image
-                source={{ uri: item.products.image_url }}
+                source={{ uri: productImage }}
                 style={styles.productImage}
                 resizeMode="cover"
               />

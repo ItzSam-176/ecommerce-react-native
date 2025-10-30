@@ -1,3 +1,262 @@
+// // src/components/customer/ProductInfoBottomSheet.js
+// import React, {
+//   useMemo,
+//   useRef,
+//   useEffect,
+//   useCallback,
+//   useState,
+//   forwardRef,
+//   useImperativeHandle,
+// } from 'react';
+// import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+// import BottomSheet, {
+//   BottomSheetScrollView,
+//   BottomSheetFooter,
+// } from '@gorhom/bottom-sheet';
+// import Ionicons from 'react-native-vector-icons/Ionicons';
+// import LinearGradient from 'react-native-linear-gradient';
+
+// const ProductInfoBottomSheet = forwardRef(
+//   (
+//     {
+//       product,
+//       snapPoints,
+//       onClose,
+//       onChange,
+//       showCloseButton = true,
+//       enablePanDownToClose = true,
+//       variant = 'discover', // 'discover' or 'details'
+//       onAddToCart,
+//       isInCart,
+//       navigation,
+//     },
+//     ref,
+//   ) => {
+//     const bottomSheetRef = useRef(null);
+//     const [activeTab, setActiveTab] = useState('description');
+//     const [currentSnapIndex, setCurrentSnapIndex] = useState(0);
+
+//     // Expose methods to parent
+//     useImperativeHandle(ref, () => ({
+//       present: () => bottomSheetRef.current?.present(),
+//       close: () => bottomSheetRef.current?.close(),
+//       snapToIndex: index => bottomSheetRef.current?.snapToIndex(index),
+//     }));
+
+//     const handleSheetChange = useCallback(
+//       index => {
+//         setCurrentSnapIndex(index);
+//         if (index === -1 && enablePanDownToClose) {
+//           onClose?.();
+//         }
+//         onChange?.(index);
+//       },
+//       [onClose, onChange, enablePanDownToClose],
+//     );
+
+//     const productCategories = useMemo(() => {
+//       if (!product || !product.product_categories) return [];
+
+//       return product.product_categories
+//         .map(pc => ({
+//           id: pc.category_id || pc.category?.id,
+//           name: pc.category?.name || 'Unknown Category',
+//         }))
+//         .filter(cat => cat.id && cat.name);
+//     }, [product]);
+
+//     const handleCartButtonPress = useCallback(() => {
+//       if (isInCart) {
+//         onClose?.();
+//         navigation?.navigate('CartStack', {
+//           screen: 'CartScreen',
+//         });
+//       } else {
+//         onAddToCart?.();
+//       }
+//     }, [isInCart, onAddToCart, onClose, navigation]);
+
+//     // Render footer based on variant
+//     const renderFooter = useCallback(
+//       props => {
+//         // For discover variant: always show footer
+//         // For details variant: only show when expanded (index > 0)
+//         const shouldShowFooter = variant === 'discover' || currentSnapIndex > 0;
+
+//         if (!shouldShowFooter) return null;
+
+//         const { animatedFooterPosition, bottomInset = -20 } = props;
+//         return (
+//           <BottomSheetFooter
+//             animatedFooterPosition={animatedFooterPosition}
+//             bottomInset={bottomInset}
+//           >
+//             <View style={styles.footerContainer}>
+//               <View style={styles.priceSection}>
+//                 <Text style={styles.footerPriceLabel}>Price</Text>
+//                 <Text style={styles.footerPriceValue}>
+//                   {require('../../utils/formatCurrency').default(
+//                     product?.price,
+//                   )}
+//                 </Text>
+//               </View>
+
+//               <TouchableOpacity
+//                 style={[
+//                   styles.fullWidthCartButton,
+//                   product?.quantity <= 0 && styles.disabledButton,
+//                 ]}
+//                 onPress={handleCartButtonPress}
+//                 disabled={product?.quantity <= 0}
+//               >
+//                 <LinearGradient
+//                   colors={
+//                     product?.quantity <= 0
+//                       ? ['#999', '#888']
+//                       : isInCart
+//                       ? ['#5fd4f7', '#4fc3f7', '#3aa5c7']
+//                       : ['#5fd4f7', '#4fc3f7', '#3aa5c7']
+//                   }
+//                   style={styles.cartButtonGradient}
+//                   start={{ x: 0, y: 0 }}
+//                   end={{ x: 1, y: 1 }}
+//                 >
+//                   <View style={styles.cartButtonContent}>
+//                     <Text style={styles.cartButtonText}>
+//                       {product?.quantity <= 0
+//                         ? 'Out of Stock'
+//                         : isInCart
+//                         ? 'View in Cart'
+//                         : 'Add to Cart'}
+//                     </Text>
+//                   </View>
+//                 </LinearGradient>
+//               </TouchableOpacity>
+//             </View>
+//           </BottomSheetFooter>
+//         );
+//       },
+//       [
+//         isInCart,
+//         handleCartButtonPress,
+//         product?.quantity,
+//         product?.price,
+//         variant,
+//         currentSnapIndex,
+//       ],
+//     );
+
+//     if (!product) return null;
+
+//     return (
+//       <BottomSheet
+//         ref={bottomSheetRef}
+//         index={variant === 'discover' ? -1 : 0}
+//         snapPoints={['30%', ...snapPoints ]}
+//         enablePanDownToClose={enablePanDownToClose}
+//         onChange={handleSheetChange}
+//         backgroundStyle={styles.bottomSheet}
+//         handleIndicatorStyle={[styles.handle, variant === 'discover' && { display: 'none' }]}
+//         footerComponent={renderFooter}
+//       >
+//         {/* Close Button (conditional) */}
+//         {showCloseButton && (
+//           <View style={styles.header}>
+//             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+//               <Ionicons name="close" size={24} color="#fff" />
+//             </TouchableOpacity>
+//           </View>
+//         )}
+
+//         {/* Tab Section */}
+//         <View style={styles.tabContainer}>
+//           <View style={{ paddingBottom: 8 }}>
+//             <View style={styles.tabWrapper}>
+//               <TouchableOpacity
+//                 style={[
+//                   styles.tab,
+//                   activeTab === 'description' && styles.activeTab,
+//                 ]}
+//                 onPress={() => setActiveTab('description')}
+//               >
+//                 <Text
+//                   style={[
+//                     styles.tabText,
+//                     activeTab === 'description' && styles.activeTabText,
+//                   ]}
+//                 >
+//                   Description
+//                 </Text>
+//               </TouchableOpacity>
+
+//               <TouchableOpacity
+//                 style={[
+//                   styles.tab,
+//                   activeTab === 'specification' && styles.activeTab,
+//                 ]}
+//                 onPress={() => setActiveTab('specification')}
+//               >
+//                 <Text
+//                   style={[
+//                     styles.tabText,
+//                     activeTab === 'specification' && styles.activeTabText,
+//                   ]}
+//                 >
+//                   Specification
+//                 </Text>
+//               </TouchableOpacity>
+//             </View>
+//           </View>
+//         </View>
+
+//         {/* Scrollable Content */}
+//         <BottomSheetScrollView
+//           style={styles.content}
+//           contentContainerStyle={{ paddingBottom: 16 }}
+//           showsVerticalScrollIndicator={false}
+//         >
+//           {activeTab === 'description' ? (
+//             <View>
+//               <Text style={styles.productTitle}>{product.name}</Text>
+
+//               {product.description ? (
+//                 <Text style={styles.productDescription}>
+//                   {product.description}
+//                 </Text>
+//               ) : (
+//                 <Text style={styles.noDataText}>No description available</Text>
+//               )}
+//             </View>
+//           ) : (
+//             <View>
+//               <Text style={styles.productTitle}>Specifications</Text>
+
+//               <View style={styles.specRow}>
+//                 <Text style={styles.specLabel}>Price:</Text>
+//                 <Text style={styles.specValue}>
+//                   {require('../../utils/formatCurrency').default(product.price)}
+//                 </Text>
+//               </View>
+
+//               {productCategories.length > 0 && (
+//                 <View style={styles.specRow}>
+//                   <Text style={styles.specLabel}>Categories:</Text>
+//                   <Text style={styles.specValue}>
+//                     {productCategories.map(cat => cat.name).join(', ')}
+//                   </Text>
+//                 </View>
+//               )}
+//             </View>
+//           )}
+
+//           <View style={{ height: 12 }} />
+//         </BottomSheetScrollView>
+//       </BottomSheet>
+//     );
+//   },
+// );
+
+// export default ProductInfoBottomSheet;
 // src/components/customer/ProductInfoBottomSheet.js
 import React, {
   useMemo,
@@ -12,7 +271,13 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import BottomSheet, {
   BottomSheetScrollView,
   BottomSheetFooter,
+  useBottomSheetInternal, // ✅ ADD THIS
 } from '@gorhom/bottom-sheet';
+import Animated, {
+  useAnimatedStyle,
+  interpolate,
+  Extrapolate,
+} from 'react-native-reanimated'; // ✅ ADD THIS
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 
@@ -25,7 +290,7 @@ const ProductInfoBottomSheet = forwardRef(
       onChange,
       showCloseButton = true,
       enablePanDownToClose = true,
-      variant = 'discover', // 'discover' or 'details'
+      variant = 'discover',
       onAddToCart,
       isInCart,
       navigation,
@@ -76,22 +341,91 @@ const ProductInfoBottomSheet = forwardRef(
       }
     }, [isInCart, onAddToCart, onClose, navigation]);
 
-    // Render footer based on variant
-    const renderFooter = useCallback(
+    // ✅ NEW: Animated Footer with smooth slide
+    const AnimatedFooterComponent = useCallback(
       props => {
         // For discover variant: always show footer
-        // For details variant: only show when expanded (index > 0)
-        const shouldShowFooter = variant === 'discover' || currentSnapIndex > 0;
+        if (variant === 'discover') {
+          return (
+            <BottomSheetFooter {...props}>
+              <View style={styles.footerContainer}>
+                <View style={styles.priceSection}>
+                  <Text style={styles.footerPriceLabel}>Price</Text>
+                  <Text style={styles.footerPriceValue}>
+                    {require('../../utils/formatCurrency').default(
+                      product?.price,
+                    )}
+                  </Text>
+                </View>
 
-        if (!shouldShowFooter) return null;
+                <TouchableOpacity
+                  style={[
+                    styles.fullWidthCartButton,
+                    product?.quantity <= 0 && styles.disabledButton,
+                  ]}
+                  onPress={handleCartButtonPress}
+                  disabled={product?.quantity <= 0}
+                >
+                  <LinearGradient
+                    colors={
+                      product?.quantity <= 0
+                        ? ['#999', '#888']
+                        : isInCart
+                        ? ['#5fd4f7', '#4fc3f7', '#3aa5c7']
+                        : ['#5fd4f7', '#4fc3f7', '#3aa5c7']
+                    }
+                    style={styles.cartButtonGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <View style={styles.cartButtonContent}>
+                      <Text style={styles.cartButtonText}>
+                        {product?.quantity <= 0
+                          ? 'Out of Stock'
+                          : isInCart
+                          ? 'View in Cart'
+                          : 'Add to Cart'}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </BottomSheetFooter>
+          );
+        }
 
-        const { animatedFooterPosition, bottomInset = -20 } = props;
+        // ✅ For details variant: animate footer
+        const { animatedIndex } = useBottomSheetInternal();
+
+        // Animate opacity and translateY based on snap index
+        // When index = 0 (minimized): opacity = 0, translateY = 100
+        // When index = 1+ (expanded): opacity = 1, translateY = 0
+        const footerAnimatedStyle = useAnimatedStyle(() => {
+          const opacity = interpolate(
+            animatedIndex.value,
+            [0, 1],
+            [0, 1],
+            Extrapolate.CLAMP,
+          );
+
+          const translateY = interpolate(
+            animatedIndex.value,
+            [0, 1],
+            [100, 0],
+            Extrapolate.CLAMP,
+          );
+
+          return {
+            opacity,
+            transform: [{ translateY }],
+          };
+        });
+
         return (
-          <BottomSheetFooter
-            animatedFooterPosition={animatedFooterPosition}
-            bottomInset={bottomInset}
-          >
-            <View style={styles.footerContainer}>
+          <BottomSheetFooter {...props}>
+            <Animated.View
+              style={[styles.footerContainer, footerAnimatedStyle]}
+            >
               <View style={styles.priceSection}>
                 <Text style={styles.footerPriceLabel}>Price</Text>
                 <Text style={styles.footerPriceValue}>
@@ -132,7 +466,7 @@ const ProductInfoBottomSheet = forwardRef(
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           </BottomSheetFooter>
         );
       },
@@ -142,7 +476,6 @@ const ProductInfoBottomSheet = forwardRef(
         product?.quantity,
         product?.price,
         variant,
-        currentSnapIndex,
       ],
     );
 
@@ -152,12 +485,15 @@ const ProductInfoBottomSheet = forwardRef(
       <BottomSheet
         ref={bottomSheetRef}
         index={variant === 'discover' ? -1 : 0}
-        snapPoints={['30%', ...snapPoints ]}
+        snapPoints={snapPoints}
         enablePanDownToClose={enablePanDownToClose}
         onChange={handleSheetChange}
         backgroundStyle={styles.bottomSheet}
-        handleIndicatorStyle={styles.handle}
-        footerComponent={renderFooter}
+        handleIndicatorStyle={[
+          styles.handle,
+          variant === 'discover' && { display: 'none' },
+        ]}
+        footerComponent={AnimatedFooterComponent}
       >
         {/* Close Button (conditional) */}
         {showCloseButton && (
@@ -258,6 +594,8 @@ const ProductInfoBottomSheet = forwardRef(
 
 export default ProductInfoBottomSheet;
 
+// ... styles remain the same ...
+
 const styles = StyleSheet.create({
   bottomSheet: {
     backgroundColor: '#2a3847',
@@ -270,7 +608,8 @@ const styles = StyleSheet.create({
     elevation: 15,
   },
   handle: {
-    // display: 'none',
+    backgroundColor: '#4fc3f7',
+    width: 40,
   },
   header: {
     flexDirection: 'row',
@@ -394,7 +733,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a3847',
     borderTopWidth: 1,
     borderTopColor: 'rgba(79, 195, 247, 0.15)',
-    marginBottom: 20,
   },
   priceSection: {
     flexDirection: 'row',

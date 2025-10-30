@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { getProductPrimaryImage } from '../../utils/productImageHelper';
 
 export default function ProductCard({
   product,
@@ -124,15 +125,18 @@ export default function ProductCard({
         return renderAdminActions();
     }
   };
+  const productImage = getProductPrimaryImage(product);
 
   return (
     <View style={styles.card}>
       {/* ✅ REMOVED loading && styles.loadingCard */}
-      {product.image_url && (
-        <Image source={{ uri: product.image_url }} style={styles.image} />
+      {productImage && (
+        <Image source={{ uri: productImage }} style={styles.image} />
       )}
       <View style={styles.details}>
-        <Text style={styles.name} numberOfLines={2}>{product.name}</Text>
+        <Text style={styles.name} numberOfLines={2}>
+          {product.name}
+        </Text>
         <Text style={styles.desc} numberOfLines={2}>
           {product.description || 'No description'}
         </Text>

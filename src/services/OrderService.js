@@ -186,8 +186,19 @@ export class OrderService {
           products (
             id,
             name,
-            image_url,
-            description
+            description,
+            product_categories (
+              category_id,
+              category:category_id (
+                id,
+                name
+              )
+            ),
+            product_images (
+              id,
+              image_url,
+              display_order
+            )
           )
         `,
         )

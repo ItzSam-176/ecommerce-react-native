@@ -108,17 +108,28 @@ export class CartService {
         .from('cart')
         .select(
           `
-        id,
-        quantity,
-        created_at,
-        products (
           id,
-          name,
-          price,
-          description,
-          image_url,
-          quantity
-        )
+          quantity,
+          created_at,
+          products (
+            id,
+            name,
+            price,
+            description,
+            quantity,
+            product_categories (
+              category_id,
+              category:category_id (
+                id,
+                name
+              )
+            ),
+            product_images (
+              id,
+              image_url,
+              display_order
+            )
+          )
       `,
         )
         .eq('customer_id', user.id)

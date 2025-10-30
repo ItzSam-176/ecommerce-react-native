@@ -21,6 +21,7 @@ import { useAlert } from '../../components/informative/AlertProvider';
 import { useToastify } from '../../hooks/useToastify';
 import formatCurrency from '../../utils/formatCurrency';
 import ShimmerProductsCard from '../../components/shimmer/ShimmerProductsCard';
+import { getProductPrimaryImage } from '../../utils/productImageHelper';
 
 export default function CartScreen({ navigation }) {
   const { showAlert, showConfirm } = useAlert();
@@ -275,86 +276,90 @@ export default function CartScreen({ navigation }) {
     );
   };
 
-  const renderCartItem = ({ item }) => (
-    <View style={styles.cartItem}>
-      <View style={styles.productImageContainer}>
-        {item.products.image_url ? (
-          <Image
-            source={{ uri: item.products.image_url }}
-            style={styles.productImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.productImage, styles.placeholderImage]}>
-            <Ionicons name="image-outline" size={40} color="#666" />
-          </View>
-        )}
-      </View>
+  const renderCartItem = ({ item }) => {
+    const productImage = getProductPrimaryImage(item.products); // ✅ ADD THIS
 
-      <View style={styles.productDetails}>
-        <View style={styles.productHeader}>
-          <Text style={styles.productName} numberOfLines={2}>
-            {item.products.name}
-          </Text>
-
-          {item.products.quantity <= 0 && (
-            <View style={styles.outOfStockBadge}>
-              <Text style={styles.outOfStockText}>OUT OF STOCK</Text>
+    return (
+      <View style={styles.cartItem}>
+        <View style={styles.productImageContainer}>
+          {productImage ? ( // ✅ CHANGE THIS
+            <Image
+              source={{ uri: productImage }}
+              style={styles.productImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.productImage, styles.placeholderImage]}>
+              <Ionicons name="image-outline" size={40} color="#666" />
             </View>
           )}
-
-          {item.products.quantity > 0 &&
-            item.products.quantity < item.quantity && (
-              <View style={styles.stockWarningBadge}>
-                <Ionicons name="warning" size={12} color="#ff9800" />
-                <Text style={styles.stockWarningText}>
-                  Only {item.products.quantity} left
-                </Text>
-              </View>
-            )}
         </View>
 
-        <View style={styles.priceQuantityRow}>
-          <Text style={styles.productPrice}>
-            {formatCurrency(Number(item.products.price).toFixed(2))}
-          </Text>
+        <View style={styles.productDetails}>
+          <View style={styles.productHeader}>
+            <Text style={styles.productName} numberOfLines={2}>
+              {item.products.name}
+            </Text>
 
-          <View style={styles.quantityControls}>
-            <TouchableOpacity
-              onPress={() => handleIncrement(item)}
-              disabled={
-                loadingItems.has(item.id) ||
-                item.quantity >= (item.products?.quantity ?? 0)
-              }
-              style={styles.quantityButtonWrapper}
-            >
-              <LinearGradient
-                colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
-                style={styles.quantityButton}
+            {item.products.quantity <= 0 && (
+              <View style={styles.outOfStockBadge}>
+                <Text style={styles.outOfStockText}>OUT OF STOCK</Text>
+              </View>
+            )}
+
+            {item.products.quantity > 0 &&
+              item.products.quantity < item.quantity && (
+                <View style={styles.stockWarningBadge}>
+                  <Ionicons name="warning" size={12} color="#ff9800" />
+                  <Text style={styles.stockWarningText}>
+                    Only {item.products.quantity} left
+                  </Text>
+                </View>
+              )}
+          </View>
+
+          <View style={styles.priceQuantityRow}>
+            <Text style={styles.productPrice}>
+              {formatCurrency(Number(item.products.price).toFixed(2))}
+            </Text>
+
+            <View style={styles.quantityControls}>
+              <TouchableOpacity
+                onPress={() => handleIncrement(item)}
+                disabled={
+                  loadingItems.has(item.id) ||
+                  item.quantity >= (item.products?.quantity ?? 0)
+                }
+                style={styles.quantityButtonWrapper}
               >
-                <Ionicons name="add" size={20} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
+                  style={styles.quantityButton}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
 
-            <Text style={styles.quantityText}>{item.quantity}</Text>
+              <Text style={styles.quantityText}>{item.quantity}</Text>
 
-            <TouchableOpacity
-              onPress={() => handleDecrement(item)}
-              disabled={loadingItems.has(item.id)}
-              style={styles.quantityButtonWrapper}
-            >
-              <LinearGradient
-                colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
-                style={styles.quantityButton}
+              <TouchableOpacity
+                onPress={() => handleDecrement(item)}
+                disabled={loadingItems.has(item.id)}
+                style={styles.quantityButtonWrapper}
               >
-                <Ionicons name="remove" size={20} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
+                  style={styles.quantityButton}
+                >
+                  <Ionicons name="remove" size={20} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderEmptyCart = () => (
     <View style={styles.emptyContainer}>
