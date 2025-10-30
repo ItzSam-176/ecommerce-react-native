@@ -1145,7 +1145,7 @@ export default function AddProductsScreen({ navigation, route }) {
     if (currentCount >= MAX_IMAGES) {
       showToast(
         `Maximum ${MAX_IMAGES} images allowed`,
-        'Remove some images first',
+        '',
         'warning',
       );
       return;
@@ -1201,10 +1201,10 @@ export default function AddProductsScreen({ navigation, route }) {
 
       setImages(prev => [...(prev || []), ...newImages]);
 
-      // Show info if we hit the limit
-      if (images.length + newImages.length >= MAX_IMAGES) {
-        showToast(`Maximum ${MAX_IMAGES} images reached`, '', 'info');
-      }
+      // // Show info if we hit the limit
+      // if (images.length + newImages.length >= MAX_IMAGES) {
+      //   showToast(`Maximum ${MAX_IMAGES} images reached`, '', 'info');
+      // }
     } catch (error) {
       console.error('[Pick images error]:', error);
       showToast('Error selecting images', '', 'error');

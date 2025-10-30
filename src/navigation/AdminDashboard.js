@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Image } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,6 +9,7 @@ import CustomHeader from '../components/shared/CustomHeader';
 import { useAuth } from './AuthProvider';
 import CustomTabBar from '../components/customer/CustomTabBar';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
+import CustomAlert from '../components/informative/CustomAlert';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -18,26 +19,55 @@ const HIDE_TAB_SCREENS = ['AddProductsScreen'];
 
 function UsersStack() {
   const { signOut } = useAuth();
+  const [showLogoutAlert, setShowLogoutAlert] = useState(false); // ✅ Add state
+
   return (
-    <Stack.Navigator
-      screenOptions={({ navigation, route }) => ({
-        header: () => (
-          <CustomHeader
-            navigation={navigation}
-            title={'Users'}
-            canGoBack={navigation.canGoBack() && route.name !== 'UserScreen'} // ❌ hide back on root
-            screenName={route.name}
-            onLogout={() => {
+    <>
+      <Stack.Navigator
+        screenOptions={({ navigation, route }) => ({
+          header: () => (
+            <CustomHeader
+              navigation={navigation}
+              title={'Users'}
+              canGoBack={navigation.canGoBack() && route.name !== 'UserScreen'}
+              screenName={route.name}
+              onLogout={() => {
+                setShowLogoutAlert(true); // ✅ Show alert instead of direct signOut
+              }}
+            />
+          ),
+        })}
+      >
+        <Stack.Screen name="UserScreen" component={UsersScreen} />
+      </Stack.Navigator>
+
+      {/* ✅ Add CustomAlert */}
+      <CustomAlert
+        visible={showLogoutAlert}
+        type="confirm"
+        title="Logout"
+        message="Are you sure you want to logout?"
+        buttons={[
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setShowLogoutAlert(false),
+          },
+          {
+            text: 'Logout',
+            style: 'destructive',
+            onPress: () => {
+              setShowLogoutAlert(false);
               signOut();
-            }}
-          />
-        ),
-      })}
-    >
-      <Stack.Screen name="UserScreen" component={UsersScreen} />
-    </Stack.Navigator>
+            },
+          },
+        ]}
+        onBackdropPress={() => setShowLogoutAlert(false)}
+      />
+    </>
   );
 }
+
 function OrdersStack() {
   return (
     <Stack.Navigator
