@@ -1099,23 +1099,6 @@ export default function AddProductsScreen({ navigation, route }) {
     }
   };
 
-  const testConnection = async () => {
-  console.log('[Testing Supabase connection]');
-  try {
-    const { data, error } = await supabase.from('products').select('id').limit(1);
-    if (error) {
-      console.error('[Connection test failed]:', error);
-      showToast('Connection failed', error.message, 'error');
-    } else {
-      console.log('[Connection test success]:', data);
-      showToast('Connection works!', '', 'success');
-    }
-  } catch (err) {
-    console.error('[Connection test error]:', err);
-    showToast('Connection error', err.message, 'error');
-  }
-};
-
   const fetchProductCategories = async () => {
     console.log('[Fetching product categories for product]:', product.id);
 
@@ -1343,234 +1326,9 @@ export default function AddProductsScreen({ navigation, route }) {
 
   // Find and replace the saveProduct function (starting around line 279)
 
-  // const saveProduct = async () => {
-  //   if (!validateForm()) return;
-  //   if (!adminId) return showToast('Admin not loaded yet', '', 'error');
-
-  //   let productId;
-  //   let folderName;
-
-  //   try {
-  //     if (product) {
-  //       // UPDATE EXISTING PRODUCT
-  //       productId = product.id;
-
-  //       // Generate folder name from product name and ID
-  //       folderName = `${slugify(name, {
-  //         lower: true,
-  //         strict: true,
-  //       })}_${productId}`;
-
-  //       console.log('[Cleaning up product images]');
-
-  //       const { data: bucketFiles, error: listError } = await supabase.storage
-  //         .from('product-images')
-  //         .list(folderName);
-
-  //       if (listError) {
-  //         console.error('[Error listing bucket files]:', listError);
-  //       } else {
-  //         console.log('[Files in bucket folder]:', bucketFiles?.length || 0);
-  //       }
-
-  //       const { data: existingImages } = await supabase
-  //         .from('product_images')
-  //         .select('*')
-  //         .eq('product_id', productId);
-
-  //       console.log('[Existing images in DB]:', existingImages?.length || 0);
-
-  //       const currentImageIds = images
-  //         .filter(img => !img.isLocal && img.id)
-  //         .map(img => img.id);
-
-  //       console.log('[Currently selected image IDs]:', currentImageIds);
-
-  //       const imagesToDeleteFromDB = existingImages?.filter(
-  //         img => !currentImageIds.includes(img.id),
-  //       );
-
-  //       console.log(
-  //         '[Images to delete from DB]:',
-  //         imagesToDeleteFromDB?.length || 0,
-  //       );
-
-  //       if (imagesToDeleteFromDB && imagesToDeleteFromDB.length > 0) {
-  //         for (const img of imagesToDeleteFromDB) {
-  //           console.log('[Deleting from DB]:', img.storage_path);
-  //           await supabase.from('product_images').delete().eq('id', img.id);
-  //         }
-  //       }
-
-  //       const imagesToKeep = images
-  //         .filter(img => !img.isLocal && img.storagePath)
-  //         .map(img => img.storagePath);
-
-  //       console.log('[Images to keep]:', imagesToKeep);
-
-  //       if (bucketFiles && bucketFiles.length > 0) {
-  //         const filesToDelete = bucketFiles
-  //           .map(file => `${folderName}/${file.name}`)
-  //           .filter(filePath => !imagesToKeep.includes(filePath));
-
-  //         console.log('[Files to delete from bucket]:', filesToDelete);
-
-  //         if (filesToDelete.length > 0) {
-  //           const { error: deleteError } = await supabase.storage
-  //             .from('product-images')
-  //             .remove(filesToDelete);
-
-  //           if (deleteError) {
-  //             console.error('[Bucket deletion error]:', deleteError);
-  //           } else {
-  //             console.log('[Deleted files from bucket]:', filesToDelete.length);
-  //           }
-  //         }
-  //       }
-
-  //       // Upload new local images with proper display_order
-  //       const localImages = images.filter(img => img.isLocal);
-  //       console.log('[Uploading new images]:', localImages.length);
-
-  //       for (let i = 0; i < localImages.length; i++) {
-  //         const img = localImages[i];
-  //         const uploadResult = await uploadImage(
-  //           img,
-  //           folderName,
-  //           img.displayOrder,
-  //         );
-
-  //         if (uploadResult) {
-  //           await supabase.from('product_images').insert({
-  //             product_id: productId,
-  //             image_url: uploadResult.publicUrl,
-  //             storage_path: uploadResult.storagePath,
-  //             display_order: img.displayOrder,
-  //           });
-  //         }
-  //       }
-
-  //       // Update display_order for existing images
-  //       const existingImagesToUpdate = images.filter(
-  //         img => !img.isLocal && img.id,
-  //       );
-  //       for (const img of existingImagesToUpdate) {
-  //         await supabase
-  //           .from('product_images')
-  //           .update({ display_order: img.displayOrder })
-  //           .eq('id', img.id);
-  //       }
-
-  //       // ✅ FIXED: Removed image_folder from update
-  //       const { error } = await supabase
-  //         .from('products')
-  //         .update({
-  //           name,
-  //           price: parseFloat(price),
-  //           quantity: parseInt(quantity),
-  //           description,
-  //         })
-  //         .eq('id', productId);
-
-  //       if (error) {
-  //         console.error('[Update error]:', error);
-  //         return Alert.alert('Error', error.message);
-  //       }
-
-  //       await supabase
-  //         .from('product_categories')
-  //         .delete()
-  //         .eq('product_id', productId);
-  //     } else {
-  //       // CREATE NEW PRODUCT
-  //       const { data, error } = await supabase
-  //         .from('products')
-  //         .insert([
-  //           {
-  //             name,
-  //             price: parseFloat(price),
-  //             quantity: parseInt(quantity),
-  //             description,
-  //             created_by: adminId,
-  //           },
-  //         ])
-  //         .select()
-  //         .single();
-
-  //       if (error) {
-  //         console.error('[Insert error]:', error);
-  //         return Alert.alert('Error', error.message);
-  //       }
-
-  //       productId = data.id;
-  //       folderName = `${slugify(name, {
-  //         lower: true,
-  //         strict: true,
-  //       })}_${productId}`;
-
-  //       console.log('[Uploading images]:', images.length);
-
-  //       for (let i = 0; i < images.length; i++) {
-  //         const img = images[i];
-  //         const uploadResult = await uploadImage(
-  //           img,
-  //           folderName,
-  //           img.displayOrder,
-  //         );
-
-  //         if (uploadResult) {
-  //           await supabase.from('product_images').insert({
-  //             product_id: productId,
-  //             image_url: uploadResult.publicUrl,
-  //             storage_path: uploadResult.storagePath,
-  //             display_order: img.displayOrder,
-  //           });
-  //         }
-  //       }
-
-  //       // ✅ FIXED: No need to update image_folder
-  //     }
-
-  //     // Insert categories
-  //     for (const cat of selectedCategories) {
-  //       await supabase
-  //         .from('product_categories')
-  //         .insert([{ product_id: productId, category_id: cat.id }]);
-  //     }
-
-  //     showToast(product ? 'Product updated!' : 'Product added!', '', 'success');
-  //     navigation.navigate('ProductsScreen', { productChanged: true });
-  //   } catch (error) {
-  //     console.error('[Save product error]:', error);
-  //     showToast('Something went wrong', '', 'error');
-  //   }
-  // };
-
   const saveProduct = async () => {
-    console.log('[saveProduct called]');
-
-    if (!validateForm()) {
-      console.log('[Validation failed]');
-      return;
-    }
-
-    if (!adminId) {
-      console.log('[Admin ID missing]');
-      return showToast('Admin not loaded yet', '', 'error');
-    }
-
-    // ✅ Helper function for timeouts
-    const withTimeout = (promise, timeoutMs = 15000, label = 'Operation') => {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`${label} timeout after ${timeoutMs}ms`)),
-            timeoutMs,
-          ),
-        ),
-      ]);
-    };
+    if (!validateForm()) return;
+    if (!adminId) return showToast('Admin not loaded yet', '', 'error');
 
     let productId;
     let folderName;
@@ -1579,204 +1337,148 @@ export default function AddProductsScreen({ navigation, route }) {
       if (product) {
         // UPDATE EXISTING PRODUCT
         productId = product.id;
+
+        // Generate folder name from product name and ID
         folderName = `${slugify(name, {
           lower: true,
           strict: true,
         })}_${productId}`;
 
-        console.log('[Updating existing product]');
-        console.log('[Folder name]:', folderName);
+        console.log('[Cleaning up product images]');
 
-        try {
-          console.log('[Fetching existing images from DB]');
-          const { data: existingImages } = await withTimeout(
-            supabase
-              .from('product_images')
-              .select('*')
-              .eq('product_id', productId),
-            15000,
-            'Fetch existing images',
-          );
+        const { data: bucketFiles, error: listError } = await supabase.storage
+          .from('product-images')
+          .list(folderName);
 
-          console.log('[Existing images in DB]:', existingImages?.length || 0);
-
-          const currentImageIds = images
-            .filter(img => !img.isLocal && img.id)
-            .map(img => img.id);
-
-          console.log('[Currently selected image IDs]:', currentImageIds);
-
-          const imagesToDeleteFromDB = existingImages?.filter(
-            img => !currentImageIds.includes(img.id),
-          );
-
-          console.log(
-            '[Images to delete from DB]:',
-            imagesToDeleteFromDB?.length || 0,
-          );
-
-          // Delete from DB and storage
-          if (imagesToDeleteFromDB && imagesToDeleteFromDB.length > 0) {
-            console.log('[Starting deletion]');
-
-            const pathsToDelete = imagesToDeleteFromDB.map(
-              img => img.storage_path,
-            );
-
-            // Delete from DB first
-            for (const img of imagesToDeleteFromDB) {
-              console.log('[Deleting from DB]:', img.id);
-              await withTimeout(
-                supabase.from('product_images').delete().eq('id', img.id),
-                10000,
-                'Delete image from DB',
-              );
-            }
-            console.log('[DB deletion complete]');
-
-            // Delete from storage (don't await)
-            if (pathsToDelete.length > 0) {
-              console.log(
-                '[Deleting from storage]:',
-                pathsToDelete.length,
-                'files',
-              );
-              supabase.storage
-                .from('product-images')
-                .remove(pathsToDelete)
-                .then(() => console.log('[Storage files deleted]'))
-                .catch(err =>
-                  console.error(
-                    '[Storage deletion failed - non-critical]:',
-                    err,
-                  ),
-                );
-            }
-          }
-
-          console.log('[Starting image upload section]');
-          // Upload new local images
-          const localImages = images.filter(img => img.isLocal);
-          console.log('[Uploading new images]:', localImages.length);
-
-          for (let i = 0; i < localImages.length; i++) {
-            const img = localImages[i];
-            console.log(`[Uploading image ${i + 1}/${localImages.length}]`);
-
-            const uploadResult = await uploadImage(
-              img,
-              folderName,
-              img.displayOrder,
-            );
-
-            if (uploadResult) {
-              console.log('[Image uploaded, inserting to DB]');
-              await withTimeout(
-                supabase.from('product_images').insert({
-                  product_id: productId,
-                  image_url: uploadResult.publicUrl,
-                  storage_path: uploadResult.storagePath,
-                  display_order: img.displayOrder,
-                }),
-                10000,
-                'Insert image to DB',
-              );
-              console.log('[DB insert complete]');
-            } else {
-              console.error('[Upload failed for image]:', img.name);
-            }
-          }
-
-          console.log('[Starting display_order updates]');
-          // Update display_order for existing images
-          const existingImagesToUpdate = images.filter(
-            img => !img.isLocal && img.id,
-          );
-          console.log(
-            '[Updating display_order for]:',
-            existingImagesToUpdate.length,
-          );
-
-          for (const img of existingImagesToUpdate) {
-            console.log(
-              '[Updating display_order]:',
-              img.id,
-              'to',
-              img.displayOrder,
-            );
-            await withTimeout(
-              supabase
-                .from('product_images')
-                .update({ display_order: img.displayOrder })
-                .eq('id', img.id),
-              10000,
-              'Update display_order',
-            );
-          }
-          console.log('[Display_order updates complete]');
-
-          console.log('[Updating product info]');
-          const { error } = await withTimeout(
-            supabase
-              .from('products')
-              .update({
-                name,
-                price: parseFloat(price),
-                quantity: parseInt(quantity),
-                description,
-              })
-              .eq('id', productId),
-            10000,
-            'Update product',
-          );
-
-          if (error) {
-            console.error('[Update error]:', error);
-            return Alert.alert('Error', error.message);
-          }
-          console.log('[Product info updated]');
-
-          console.log('[Deleting old categories]');
-          await withTimeout(
-            supabase
-              .from('product_categories')
-              .delete()
-              .eq('product_id', productId),
-            10000,
-            'Delete old categories',
-          );
-          console.log('[Old categories deleted]');
-        } catch (updateError) {
-          console.error('[Error in update block]:', updateError);
-          if (updateError.message.includes('timeout')) {
-            showToast(
-              'Network timeout',
-              'Please check your connection',
-              'error',
-            );
-          }
-          throw updateError;
+        if (listError) {
+          console.error('[Error listing bucket files]:', listError);
+        } else {
+          console.log('[Files in bucket folder]:', bucketFiles?.length || 0);
         }
+
+        const { data: existingImages } = await supabase
+          .from('product_images')
+          .select('*')
+          .eq('product_id', productId);
+
+        console.log('[Existing images in DB]:', existingImages?.length || 0);
+
+        const currentImageIds = images
+          .filter(img => !img.isLocal && img.id)
+          .map(img => img.id);
+
+        console.log('[Currently selected image IDs]:', currentImageIds);
+
+        const imagesToDeleteFromDB = existingImages?.filter(
+          img => !currentImageIds.includes(img.id),
+        );
+
+        console.log(
+          '[Images to delete from DB]:',
+          imagesToDeleteFromDB?.length || 0,
+        );
+
+        if (imagesToDeleteFromDB && imagesToDeleteFromDB.length > 0) {
+          for (const img of imagesToDeleteFromDB) {
+            console.log('[Deleting from DB]:', img.storage_path);
+            await supabase.from('product_images').delete().eq('id', img.id);
+          }
+        }
+
+        const imagesToKeep = images
+          .filter(img => !img.isLocal && img.storagePath)
+          .map(img => img.storagePath);
+
+        console.log('[Images to keep]:', imagesToKeep);
+
+        if (bucketFiles && bucketFiles.length > 0) {
+          const filesToDelete = bucketFiles
+            .map(file => `${folderName}/${file.name}`)
+            .filter(filePath => !imagesToKeep.includes(filePath));
+
+          console.log('[Files to delete from bucket]:', filesToDelete);
+
+          if (filesToDelete.length > 0) {
+            const { error: deleteError } = await supabase.storage
+              .from('product-images')
+              .remove(filesToDelete);
+
+            if (deleteError) {
+              console.error('[Bucket deletion error]:', deleteError);
+            } else {
+              console.log('[Deleted files from bucket]:', filesToDelete.length);
+            }
+          }
+        }
+
+        // Upload new local images with proper display_order
+        const localImages = images.filter(img => img.isLocal);
+        console.log('[Uploading new images]:', localImages.length);
+
+        for (let i = 0; i < localImages.length; i++) {
+          const img = localImages[i];
+          const uploadResult = await uploadImage(
+            img,
+            folderName,
+            img.displayOrder,
+          );
+
+          if (uploadResult) {
+            await supabase.from('product_images').insert({
+              product_id: productId,
+              image_url: uploadResult.publicUrl,
+              storage_path: uploadResult.storagePath,
+              display_order: img.displayOrder,
+            });
+          }
+        }
+
+        // Update display_order for existing images
+        const existingImagesToUpdate = images.filter(
+          img => !img.isLocal && img.id,
+        );
+        for (const img of existingImagesToUpdate) {
+          await supabase
+            .from('product_images')
+            .update({ display_order: img.displayOrder })
+            .eq('id', img.id);
+        }
+
+        // ✅ FIXED: Removed image_folder from update
+        const { error } = await supabase
+          .from('products')
+          .update({
+            name,
+            price: parseFloat(price),
+            quantity: parseInt(quantity),
+            description,
+          })
+          .eq('id', productId);
+
+        if (error) {
+          console.error('[Update error]:', error);
+          return Alert.alert('Error', error.message);
+        }
+
+        await supabase
+          .from('product_categories')
+          .delete()
+          .eq('product_id', productId);
       } else {
         // CREATE NEW PRODUCT
-        console.log('[Creating new product]');
-        const { data, error } = await withTimeout(
-          supabase
-            .from('products')
-            .insert([
-              {
-                name,
-                price: parseFloat(price),
-                quantity: parseInt(quantity),
-                description,
-                created_by: adminId,
-              },
-            ])
-            .select()
-            .single(),
-          15000,
-          'Create product',
-        );
+        const { data, error } = await supabase
+          .from('products')
+          .insert([
+            {
+              name,
+              price: parseFloat(price),
+              quantity: parseInt(quantity),
+              description,
+              created_by: adminId,
+            },
+          ])
+          .select()
+          .single();
 
         if (error) {
           console.error('[Insert error]:', error);
@@ -1800,47 +1502,30 @@ export default function AddProductsScreen({ navigation, route }) {
           );
 
           if (uploadResult) {
-            await withTimeout(
-              supabase.from('product_images').insert({
-                product_id: productId,
-                image_url: uploadResult.publicUrl,
-                storage_path: uploadResult.storagePath,
-                display_order: img.displayOrder,
-              }),
-              10000,
-              'Insert new image',
-            );
+            await supabase.from('product_images').insert({
+              product_id: productId,
+              image_url: uploadResult.publicUrl,
+              storage_path: uploadResult.storagePath,
+              display_order: img.displayOrder,
+            });
           }
         }
+
+        // ✅ FIXED: No need to update image_folder
       }
 
-      console.log('[Inserting categories]');
       // Insert categories
       for (const cat of selectedCategories) {
-        await withTimeout(
-          supabase
-            .from('product_categories')
-            .insert([{ product_id: productId, category_id: cat.id }]),
-          10000,
-          'Insert category',
-        );
+        await supabase
+          .from('product_categories')
+          .insert([{ product_id: productId, category_id: cat.id }]);
       }
-      console.log('[Categories inserted]');
 
-      console.log('[Product save complete]');
       showToast(product ? 'Product updated!' : 'Product added!', '', 'success');
       navigation.navigate('ProductsScreen', { productChanged: true });
     } catch (error) {
       console.error('[Save product error]:', error);
-      if (error.message.includes('timeout')) {
-        showToast(
-          'Network timeout',
-          'Please check your internet connection',
-          'error',
-        );
-      } else {
-        showToast('Something went wrong', error.message, 'error');
-      }
+      showToast('Something went wrong', '', 'error');
     }
   };
 
@@ -2193,10 +1878,6 @@ export default function AddProductsScreen({ navigation, route }) {
         title={product ? 'Update Product' : 'Add Product'}
         onPress={saveProduct}
       />
-<CustomButton
-  title="Test Connection"
-  onPress={testConnection}
-/>
     </ScrollView>
   );
 }
