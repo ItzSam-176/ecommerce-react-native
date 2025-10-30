@@ -234,10 +234,7 @@ const styles = StyleSheet.create({
     elevation: 15,
   },
   handle: {
-    backgroundColor: 'rgba(79, 195, 247, 0.3)',
-    width: 50,
-    height: 5,
-    borderRadius: 3,
+    display: 'none',
   },
   header: {
     flexDirection: 'row',
@@ -269,30 +266,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: 'rgba(42, 56, 71, 0.6)',
-    borderWidth: 2,
-    borderColor: 'rgba(79, 195, 247, 0.5)',
+    backgroundColor: '#1f2937', // DARKER for inactive (sunken)
+    borderWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.3)', // DARK border top (sunken effect)
+    borderLeftColor: 'rgba(0, 0, 0, 0.2)',
+    borderRightColor: 'rgba(0, 0, 0, 0.2)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)', // LIGHT border bottom
     minWidth: 140,
     alignItems: 'center',
+    shadowColor: '#000', // INSET shadow effect
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+    elevation: 0, // NO elevation for inactive (flat/sunken)
   },
   activeTab: {
-    backgroundColor: '#3a4a5a',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    shadowColor: '#4fc3f7',
-    shadowOpacity: 0.5,
+    backgroundColor: '#3a4a5a', // LIGHTER for active (lifted)
+    borderWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)', // LIGHT border top (lifted effect)
+    borderLeftColor: 'rgba(255, 255, 255, 0.1)',
+    borderRightColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)', // DARK border bottom
+    shadowColor: '#4fc3f7', // GLOW shadow
+    shadowOpacity: 0.6,
     shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 10,
-    elevation: 10,
+    shadowRadius: 12,
+    elevation: 8, // HIGH elevation (lifted)
   },
   tabText: {
     fontSize: 15,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: 'rgba(255, 255, 255, 0.4)', // DIM text for inactive
+    textShadowColor: 'rgba(0, 0, 0, 0.5)', // TEXT shadow for depth
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   activeTabText: {
-    color: '#4fc3f7',
+    color: '#4fc3f7', // BRIGHT color for active
     fontWeight: '700',
+    textShadowColor: 'rgba(79, 195, 247, 0.5)', // GLOW text shadow
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   content: {
     flex: 1,

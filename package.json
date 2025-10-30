@@ -36,6 +36,7 @@
     "react-native-navigation-bar-color": "^2.0.2",
     "react-native-popup-menu": "^0.18.0",
     "react-native-reanimated": "^3.19.0",
+    "react-native-reanimated-carousel": "^4.0.3",
     "react-native-reanimated-table": "^0.0.2",
     "react-native-safe-area-context": "^5.6.1",
     "react-native-screens": "^4.16.0",

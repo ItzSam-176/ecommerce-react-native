@@ -44,6 +44,7 @@ import {
   TOUR_KEYS,
   resetTour,
 } from '../../utils/tourGuideHelper';
+import ProductInfoBottomSheet from '../../components/customer/ProductInfoBottomSheet';
 
 const { width, height } = Dimensions.get('window');
 const CARD_WIDTH = width * 1;
@@ -73,6 +74,7 @@ function ProductDiscoveryContent({ navigation, route }) {
     useState(initialCategoryName);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
+  const bottomSheetRef = useRef(null);
   const [index, setIndex] = useState(0);
 
   const [frontProduct, setFrontProduct] = useState(null);
@@ -220,6 +222,12 @@ function ProductDiscoveryContent({ navigation, route }) {
   const memoizedGetWishlist = useCallback(() => {
     getWishlist?.();
   }, [getWishlist]);
+
+  // Add handler to close the bottom sheet
+  const handleCloseBottomSheet = useCallback(() => {
+    bottomSheetRef.current?.close();
+    setBottomSheetVisible(false);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -510,7 +518,7 @@ function ProductDiscoveryContent({ navigation, route }) {
             >
               <TouchableOpacity
                 style={styles.headerButton}
-                onPress={() => setBottomSheetVisible(true)}
+                onPress={() => bottomSheetRef.current?.snapToIndex(1)}
                 disabled={!frontProduct}
               >
                 <LinearGradient
@@ -719,7 +727,7 @@ function ProductDiscoveryContent({ navigation, route }) {
           </View>
         ) : null}
 
-        <ProductDetailsBottomSheet
+        {/* <ProductDetailsBottomSheet
           product={frontProduct}
           visible={bottomSheetVisible}
           onClose={() => setBottomSheetVisible(false)}
@@ -727,6 +735,18 @@ function ProductDiscoveryContent({ navigation, route }) {
           onAddToCart={() => addToCart(frontProduct)}
           isInWishlist={frontProduct ? isInWishlist(frontProduct.id) : false}
           isInCart={frontProduct ? isInCart(frontProduct.id) : false}
+          navigation={navigation}
+        /> */}
+        <ProductInfoBottomSheet
+          ref={bottomSheetRef}
+          product={frontProduct}
+          snapPoints={['60%', '65%', '70%', '72%', '73%', '75%']}
+          onClose={handleCloseBottomSheet}
+          showCloseButton={true}
+          enablePanDownToClose={true}
+          variant="discover"
+          onAddToCart={() => addToCart(frontProduct)}
+          isInCart={isInCart(frontProduct?.id)}
           navigation={navigation}
         />
       </View>

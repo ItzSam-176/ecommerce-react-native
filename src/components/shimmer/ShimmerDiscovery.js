@@ -14,7 +14,7 @@ export default function ShimmerDiscovery() {
       <View style={styles.productContainer}>
         <ShimmerPlaceholder
           LinearGradient={LinearGradient}
-          shimmerColors={['#2a3847', '#3a4857', '#2a3847']}
+          shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
           style={styles.image}
         />
 
@@ -24,29 +24,29 @@ export default function ShimmerDiscovery() {
             <View style={styles.leftOverlay}>
               <ShimmerPlaceholder
                 LinearGradient={LinearGradient}
-                shimmerColors={['#2a3847', '#3a4857', '#2a3847']}
+                shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
                 style={[styles.line, { width: '70%' }]}
               />
               <ShimmerPlaceholder
                 LinearGradient={LinearGradient}
-                shimmerColors={['#2a3847', '#3a4857', '#2a3847']}
+                shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
                 style={[styles.line, { width: '40%' }]}
               />
               <ShimmerPlaceholder
                 LinearGradient={LinearGradient}
-                shimmerColors={['#2a3847', '#3a4857', '#2a3847']}
+                shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
                 style={[styles.line, { width: '90%' }]}
               />
             </View>
             <View style={styles.rightOverlay}>
               <ShimmerPlaceholder
                 LinearGradient={LinearGradient}
-                shimmerColors={['#2a3847', '#3a4857', '#2a3847']}
+                shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
                 style={styles.circle}
               />
               <ShimmerPlaceholder
                 LinearGradient={LinearGradient}
-                shimmerColors={['#2a3847', '#3a4857', '#2a3847']}
+                shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
                 style={styles.circle}
               />
             </View>
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(42, 56, 71, 0.85)',
+    backgroundColor: 'rgba(74, 85, 104, 0.85)',
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 16,

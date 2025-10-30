@@ -14,7 +14,9 @@ export default function CustomHeader({
   onEditPress,
   isEditing,
   editLoading,
+  onTogglePress,
 }) {
+    const isBottomSheetExpanded = route?.params?.isBottomSheetExpanded ?? false;
   return (
     <View style={styles.headerContainer}>
       <StatusBar
@@ -86,6 +88,15 @@ export default function CustomHeader({
               onPress={onEditPress}
               iconName={isEditing ? 'checkmark' : 'create-outline'}
               size={22}
+            />
+          )}
+
+          {/* Product Details Screen - Dynamic toggle button */}
+          {screenName === 'ProductDetailsScreen' && onTogglePress && (
+            <IconButton
+              onPress={onTogglePress}
+              iconName={isBottomSheetExpanded ? 'chevron-down' : 'chevron-up'}
+              size={24}
             />
           )}
         </View>

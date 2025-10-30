@@ -30,6 +30,9 @@ import { useCart } from '../../hooks/useCart';
 import CustomAlert from '../../components/informative/CustomAlert';
 import ColumnSelectorModal from '../../components/admin/ColumnSelectorModal';
 import ScrollToTopButton from '../../components/shared/ScrollToTopButton';
+import ShimmerProductsCard from '../../components/shimmer/ShimmerProductsCard';
+import ShimmerPlaceholder from 'react-native-shimmer-placeholder';
+import { getProductViewMode } from '../../utils/userPreferences';
 
 const { width: screenWidth, height } = Dimensions.get('window');
 
@@ -234,14 +237,30 @@ export default function Home({ navigation, route }) {
       .map(c => ({ id: String(c.key), name: c.label }));
   }, [columns, visibleColumns]);
 
-  const onPressProduct = useCallback(
-    item => {
+const onPressProduct = useCallback(
+  async item => {
+    try {
+      const mode = await getProductViewMode();
+
+      if (mode === 'traditional') {
+        navigation.navigate('ProductDetailsScreen', {
+          productId: item.id,
+        });
+      } else {
+        navigation.navigate('ProductDiscoveryScreen', {
+          startProductId: item.id,
+        });
+      }
+    } catch (error) {
+      console.error('[Error getting view mode]:', error);
+      // Fallback to modern view
       navigation.navigate('ProductDiscoveryScreen', {
         startProductId: item.id,
       });
-    },
-    [navigation],
-  );
+    }
+  },
+  [navigation],
+);
 
   const scrollToTop = useCallback(() => {
     flatListRef.current?.scrollToOffset({ animated: true, offset: 0 });
@@ -274,8 +293,9 @@ export default function Home({ navigation, route }) {
     }
   }, [route?.params?.toggleSearchRequest]);
 
-  // Update loading condition to not show full page loader during search
-  if (loadingProducts && products.length === 0) {
+  // Fix the loading check to be more specific
+  // Fix the loading check to be more specific
+  if (loadingProducts && (!products || products.length === 0)) {
     return (
       <View style={styles.container}>
         <ImageBackground
@@ -283,9 +303,39 @@ export default function Home({ navigation, route }) {
           style={styles.backgroundImage}
           resizeMode="cover"
         >
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4fc3f7" />
-            <Text style={styles.loadingText}>Loading products...</Text>
+          {/* Shimmer for Filter Section */}
+          <View style={styles.filterSection}>
+            <View style={styles.filterRow}>
+              <ShimmerPlaceholder
+                LinearGradient={LinearGradient}
+                shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
+                style={styles.filterButtonShimmer}
+              />
+              <View style={styles.categoryShimmerRow}>
+                <ShimmerPlaceholder
+                  LinearGradient={LinearGradient}
+                  shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
+                  style={styles.categoryChipShimmer}
+                />
+                <ShimmerPlaceholder
+                  LinearGradient={LinearGradient}
+                  shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
+                  style={styles.categoryChipShimmer}
+                />
+                <ShimmerPlaceholder
+                  LinearGradient={LinearGradient}
+                  shimmerColors={['#4a5568', '#6b7280', '#4a5568']}
+                  style={styles.categoryChipShimmer}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Shimmer for Products Grid */}
+          <View style={styles.shimmerContainer}>
+            <View style={styles.shimmerGrid}>
+              <ShimmerProductsCard count={10} variant="home" />
+            </View>
           </View>
         </ImageBackground>
       </View>
@@ -398,7 +448,8 @@ export default function Home({ navigation, route }) {
           </View>
         </View>
 
-        {!filteredProducts || filteredProducts.length === 0 ? (
+        {!loadingProducts &&
+        (!filteredProducts || filteredProducts.length === 0) ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>
               {searchText
@@ -508,6 +559,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  shimmerContainer: {
+    flex: 1,
+    paddingTop: 16,
+  },
+  shimmerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-evenly',
+    paddingHorizontal: 8,
+    paddingLeft: 25,
+  },
   searchSection: {
     backgroundColor: 'rgba(42, 56, 71, 0.5)',
     paddingHorizontal: 16,
@@ -564,6 +626,26 @@ const styles = StyleSheet.create({
     height: 18,
     tintColor: '#fff',
   },
+  // NEW SHIMMER STYLES
+  filterButtonShimmer: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#4a5568',
+  },
+  categoryShimmerRow: {
+    flex: 1,
+    flexDirection: 'row',
+    marginRight: 12,
+    gap: 8,
+  },
+  categoryChipShimmer: {
+    width: 80,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#4a5568',
+  },
+  // END NEW SHIMMER STYLES
   chipsScroll: {
     flex: 1,
     marginRight: 12,

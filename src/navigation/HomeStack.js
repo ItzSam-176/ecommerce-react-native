@@ -5,6 +5,7 @@ import ProductDiscoveryScreen from '../screens/customer/ProductDiscoveryScreen';
 import CustomHeader from '../components/shared/CustomHeader';
 import WishlistScreen from '../screens/customer/WishlistScreen';
 import { useAuth } from './AuthProvider';
+import ProductDetailsScreen from '../screens/customer/ProductDetailsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -43,6 +44,27 @@ export default function HomeStack() {
           tabBarStyle: { display: 'none' },
         }}
       />
+      <Stack.Screen
+        name="ProductDetailsScreen"
+        component={ProductDetailsScreen}
+        options={({ navigation, route }) => ({
+          header: () => (
+            <CustomHeader
+              navigation={navigation}
+              route={route}
+              title={route.params?.productName || 'Product Details'}
+              canGoBack={true}
+              screenName="ProductDetailsScreen"
+              onTogglePress={() => {
+                // This will be handled by params
+                navigation.setParams({ toggleSheetRequest: Date.now() });
+              }}
+            />
+          ),
+          tabBarStyle: { display: 'none' },
+        })}
+      />
+
       <Stack.Screen
         name="WishlistScreen"
         component={WishlistScreen}

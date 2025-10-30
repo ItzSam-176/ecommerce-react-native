@@ -355,7 +355,11 @@ const uploadImage = async asset => {
                         colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
                         style={styles.editIcon}
                       >
-                        <Ionicons name="camera" size={20} color="#fff" />
+                        <Ionicons
+                          name="create-outline"
+                          size={20}
+                          color="#fff"
+                        />
                       </LinearGradient>
                     </View>
                   </>
@@ -483,7 +487,9 @@ const uploadImage = async asset => {
         title={errorTitle}
         message={errorMessage}
         type="error"
-        icon={<Ionicons name="close-circle-outline" size={48} color="#ff4458" />}
+        icon={
+          <Ionicons name="close-circle-outline" size={48} color="#ff4458" />
+        }
         buttons={[
           {
             text: 'OK',
@@ -550,8 +556,8 @@ const styles = StyleSheet.create({
   },
   editIconContainer: {
     position: 'absolute',
-    bottom: 5,
-    right: 5,
+    bottom: -5,
+    right: 3,
     shadowColor: '#4fc3f7',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
