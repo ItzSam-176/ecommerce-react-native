@@ -15,6 +15,7 @@ export default function CustomHeader({
   isEditing,
   editLoading,
   onTogglePress,
+  onSearchPress,
 }) {
     const isBottomSheetExpanded = route?.params?.isBottomSheetExpanded ?? false;
   return (
@@ -73,7 +74,7 @@ export default function CustomHeader({
                 iconName="heart-outline"
               />
               <IconButton
-                onPress={() => navigation.navigate('SearchScreen')}
+                onPress={onSearchPress}
                 iconName="search-outline"
               />
             </>

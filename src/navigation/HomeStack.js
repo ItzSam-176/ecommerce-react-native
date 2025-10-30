@@ -11,7 +11,6 @@ const Stack = createNativeStackNavigator();
 
 export default function HomeStack() {
   const { signOut } = useAuth();
-
   return (
     <Stack.Navigator initialRouteName="Home">
       <Stack.Screen
@@ -27,7 +26,10 @@ export default function HomeStack() {
               screenName="Home"
               onLogout={() => signOut()}
               onSearchPress={() => {
-                navigation.setParams({ toggleSearchRequest: Date.now() });
+                // ✅ Set params that Home will listen to
+                navigation.setParams({
+                  openSearchNow: true,
+                });
               }}
               onCustomizePress={() => {
                 navigation.setParams({ openColumnModalRequest: Date.now() });

@@ -16,7 +16,7 @@ const HIDE_TAB_SCREENS = [
   'UserDetailsScreen',
   'SearchScreen',
   'WishlistScreen',
-  'AddProductsScreen'
+  'AddProductsScreen',
 ];
 
 export default function CustomerTabs() {
@@ -26,15 +26,13 @@ export default function CustomerTabs() {
         // Get the currently focused route
         const route = props.state.routes[props.state.index];
         const routeName = getFocusedRouteNameFromRoute(route);
+        const params = route.params || {};
 
-        // Check if current screen should hide tabs
-        const shouldHide = HIDE_TAB_SCREENS.includes(routeName);
+        // Check if current screen should hide tabs or if hideTabBar param is true
+        const shouldHide = HIDE_TAB_SCREENS.includes(routeName) || params.hideTabBar;
 
         // Pass visible prop to CustomTabBar
         return <CustomTabBar {...props} visible={!shouldHide} />;
-      }}
-      screenOptions={{
-        headerShown: false,
       }}
     >
       <Tab.Screen

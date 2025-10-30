@@ -19,6 +19,10 @@ import {
   ScrollView,
   Image,
   TextInput,
+  Animated,
+  StatusBar,
+  Platform,
+  Keyboard,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -35,15 +39,23 @@ import ShimmerPlaceholder from 'react-native-shimmer-placeholder';
 import { getProductViewMode } from '../../utils/userPreferences';
 import { getProductPrimaryImage } from '../../utils/productImageHelper';
 
-
 const { width: screenWidth, height } = Dimensions.get('window');
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 88 : 56;
+const STATUS_BAR_HEIGHT =
+  Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
 
 export default function Home({ navigation, route }) {
   const flatListRef = useRef(null);
   const searchInputRef = useRef(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const [showCategoryChips, setShowCategoryChips] = useState(false);
-  const [showSearchInput, setShowSearchInput] = useState(false);
+
+  // ✅ NEW: Animated search states
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const searchAnimation = useRef(new Animated.Value(0)).current;
+
   const [searchText, setSearchText] = useState('');
   const [debouncedSearchText, setDebouncedSearchText] = useState('');
 
@@ -94,23 +106,159 @@ export default function Home({ navigation, route }) {
     getWishlist();
   }, []);
 
-  // Debounce search text
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedSearchText(searchText);
-    }, 500);
+    // ✅ Listen for openSearchNow param
+    if (route?.params?.openSearchNow) {
+      openSearch();
+      // Reset the param
+      navigation.setParams({ openSearchNow: false });
+    }
+  }, [route?.params?.openSearchNow]);
+
+  // ✅ NEW: Handle animated search
+  const openSearch = () => {
+    setIsSearchActive(true);
+    navigation.getParent()?.setParams({ hideTabBar: true });
+    Animated.spring(searchAnimation, {
+      toValue: 1,
+      useNativeDriver: false,
+      tension: 65,
+      friction: 9,
+    }).start(() => {
+      searchInputRef.current?.focus();
+    });
+  };
+
+  const closeSearch = () => {
+    Keyboard.dismiss();
+
+    // Set states immediately for a snappier feel
+    setSearchResults([]);
+    setSearchText('');
+    navigation.getParent()?.setParams({ hideTabBar: false });
+
+    // Use sequence for smoother transition
+    Animated.sequence([
+      // Quick fade out of search content
+      Animated.timing(searchAnimation, {
+        toValue: 0.5,
+        duration: 100,
+        useNativeDriver: false,
+      }),
+      // Faster collapse of search container
+      Animated.timing(searchAnimation, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: false,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        setIsSearchActive(false);
+      }
+    });
+  };
+
+  // ✅ NEW: Search animation interpolations
+  const searchContainerHeight = searchAnimation.interpolate({
+    inputRange: [0, 0.3, 1],
+    outputRange: [0, HEADER_HEIGHT, height],
+    extrapolate: 'clamp',
+  });
+
+  const searchContainerTop = searchAnimation.interpolate({
+    inputRange: [0, 0.3, 1],
+    outputRange: [STATUS_BAR_HEIGHT, STATUS_BAR_HEIGHT, 0],
+    extrapolate: 'clamp',
+  });
+
+  const searchContainerOpacity = searchAnimation.interpolate({
+    inputRange: [0, 0.1, 1],
+    outputRange: [0, 1, 1],
+    extrapolate: 'clamp',
+  });
+
+  const inputOpacity = searchAnimation.interpolate({
+    inputRange: [0, 0.2, 0.4, 1],
+    outputRange: [0, 0, 0.8, 1],
+    extrapolate: 'clamp',
+  });
+
+  const inputWidth = searchAnimation.interpolate({
+    inputRange: [0, 0.3, 1],
+    outputRange: [screenWidth - 80, screenWidth - 80, screenWidth - 80],
+    extrapolate: 'clamp',
+  });
+
+  const iconOpacity = searchAnimation.interpolate({
+    inputRange: [0, 0.1, 0.2],
+    outputRange: [1, 0.5, 0],
+    extrapolate: 'clamp',
+  });
+
+  const closeIconOpacity = searchAnimation.interpolate({
+    inputRange: [0.3, 0.5, 1],
+    outputRange: [0, 0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const contentOpacity = searchAnimation.interpolate({
+    inputRange: [0, 0.2, 0.4],
+    outputRange: [0, 0, 1],
+    extrapolate: 'clamp',
+  });
+
+  // ✅ NEW: Handle search
+  const handleSearch = useCallback(
+    async query => {
+      if (!query.trim()) {
+        setSearchResults([]);
+        setIsSearchLoading(false);
+        return;
+      }
+
+      try {
+        // Search from your products data
+        const filtered = products.filter(p =>
+          p.name.toLowerCase().includes(query.toLowerCase()),
+        );
+        // Small delay to ensure shimmer is visible
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setSearchResults(filtered);
+      } catch (err) {
+        console.error('[Search error]:', err);
+      } finally {
+        setIsSearchLoading(false);
+      }
+    },
+    [products],
+  );
+
+  // Effect for handling search input changes
+  useEffect(() => {
+    let searchHandler;
+    const currentSearchText = searchText; // Capture current value
+
+    if (isSearchActive && currentSearchText !== undefined) {
+      // Only show loading for non-empty searches
+      if (currentSearchText.trim()) {
+        setIsSearchLoading(true);
+
+        searchHandler = setTimeout(() => {
+          handleSearch(currentSearchText);
+        }, 500);
+      } else {
+        // Clear results immediately for empty search
+        setSearchResults([]);
+        setIsSearchLoading(false);
+      }
+    }
 
     return () => {
-      clearTimeout(handler);
+      if (searchHandler) {
+        clearTimeout(searchHandler);
+      }
     };
-  }, [searchText]);
-
-  // Reset and refetch when debounced search text changes
-  useEffect(() => {
-    if (debouncedSearchText !== undefined) {
-      fetchProducts(true);
-    }
-  }, [debouncedSearchText]);
+  }, [searchText, isSearchActive, handleSearch]);
 
   useEffect(() => {
     const req = route?.params?.openColumnModalRequest;
@@ -191,7 +339,6 @@ export default function Home({ navigation, route }) {
 
   const mappedProducts = useMemo(() => {
     if (!products) return [];
-    
 
     const mapped = products.map(p => {
       const imageUri = getProductPrimaryImage(p);
@@ -240,30 +387,29 @@ export default function Home({ navigation, route }) {
       .map(c => ({ id: String(c.key), name: c.label }));
   }, [columns, visibleColumns]);
 
-const onPressProduct = useCallback(
-  async item => {
-    try {
-      const mode = await getProductViewMode();
+  const onPressProduct = useCallback(
+    async item => {
+      try {
+        const mode = await getProductViewMode();
 
-      if (mode === 'traditional') {
-        navigation.navigate('ProductDetailsScreen', {
-          productId: item.id,
-        });
-      } else {
+        if (mode === 'traditional') {
+          navigation.navigate('ProductDetailsScreen', {
+            productId: item.id,
+          });
+        } else {
+          navigation.navigate('ProductDiscoveryScreen', {
+            startProductId: item.id,
+          });
+        }
+      } catch (error) {
+        console.error('[Error getting view mode]:', error);
         navigation.navigate('ProductDiscoveryScreen', {
           startProductId: item.id,
         });
       }
-    } catch (error) {
-      console.error('[Error getting view mode]:', error);
-      // Fallback to modern view
-      navigation.navigate('ProductDiscoveryScreen', {
-        startProductId: item.id,
-      });
-    }
-  },
-  [navigation],
-);
+    },
+    [navigation],
+  );
 
   const scrollToTop = useCallback(() => {
     flatListRef.current?.scrollToOffset({ animated: true, offset: 0 });
@@ -274,30 +420,34 @@ const onPressProduct = useCallback(
     setShowScrollToTop(scrollY > 200);
   }, []);
 
-  const clearSearch = useCallback(() => {
-    setSearchText('');
-    searchInputRef.current?.focus();
-  }, []);
+  // ✅ NEW: Render search results
+  const renderSearchResult = ({ item }) => {
+    const imageUri = getProductPrimaryImage(item);
+    return (
+      <View style={styles.searchProductCardWrapper}>
+        <ProductCard
+          id={item.id}
+          name={item.name}
+          description={item.description}
+          price={item.price}
+          imageUri={imageUri}
+          currencySymbol="₹"
+          isFavorite={isInWishlist(item.id)}
+          inCart={isInCart(item.id)}
+          cartQuantity={getQuantity(item.id)}
+          disabledAdd={(item.quantity ?? 0) <= 0 || isInCart(item.id)}
+          loadingAdd={loadingCartIds.has(item.id)}
+          onToggleFavorite={() => toggleWishlistLocal(item)}
+          onAddToCart={() => addToCartLocal(item)}
+          onPress={() => {
+            closeSearch();
+            onPressProduct(item);
+          }}
+        />
+      </View>
+    );
+  };
 
-  const toggleSearch = useCallback(() => {
-    setShowSearchInput(prev => !prev);
-    if (!showSearchInput) {
-      // Will focus after next render via autoFocus
-    } else {
-      setSearchText('');
-    }
-  }, [showSearchInput]);
-
-  useEffect(() => {
-    const req = route?.params?.toggleSearchRequest;
-    if (req) {
-      setShowSearchInput(prev => !prev);
-      navigation.setParams({ toggleSearchRequest: null });
-    }
-  }, [route?.params?.toggleSearchRequest]);
-
-  // Fix the loading check to be more specific
-  // Fix the loading check to be more specific
   if (loadingProducts && (!products || products.length === 0)) {
     return (
       <View style={styles.container}>
@@ -334,7 +484,6 @@ const onPressProduct = useCallback(
             </View>
           </View>
 
-          {/* Shimmer for Products Grid */}
           <View style={styles.shimmerContainer}>
             <View style={styles.shimmerGrid}>
               <ShimmerProductsCard count={10} variant="home" />
@@ -375,149 +524,240 @@ const onPressProduct = useCallback(
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        {/* Search Input Section */}
-        {showSearchInput && (
-          <View style={styles.searchSection}>
-            <View style={styles.searchInputContainer}>
-              <Ionicons
-                name="search-outline"
-                size={20}
-                color="#4fc3f7"
-                style={styles.searchIcon}
-              />
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Search products..."
-                placeholderTextColor="#999"
-                value={searchText}
-                onChangeText={setSearchText}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                autoFocus={true}
-              />
-              {searchText.length > 0 && (
+        {/* ✅ Animated Search Overlay - Only visible when animation is significant */}
+        {(isSearchActive || searchAnimation._value > 0.1) && (
+          <Animated.View
+            style={[
+              styles.searchContainer,
+              {
+                height: searchContainerHeight,
+                top: searchContainerTop,
+                opacity: searchContainerOpacity,
+              },
+            ]}
+          >
+            {/* Search Header with Input */}
+            <View style={styles.searchHeader}>
+              <Animated.View
+                style={[
+                  styles.searchInputContainer,
+                  {
+                    opacity: inputOpacity,
+                    width: inputWidth,
+                  },
+                ]}
+              >
+                <Ionicons name="search" size={20} color="#999" />
+                <TextInput
+                  ref={searchInputRef}
+                  style={styles.searchInput}
+                  placeholder="Search products..."
+                  placeholderTextColor="#999"
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Ionicons name="close-circle" size={20} color="#999" />
+                  </TouchableOpacity>
+                )}
+              </Animated.View>
+
+              <Animated.View
+                style={[styles.iconWrapper, { opacity: iconOpacity }]}
+                pointerEvents="none"
+              >
+                <Ionicons name="search" size={24} color="#fff" />
+              </Animated.View>
+
+              <Animated.View style={{ opacity: closeIconOpacity }}>
                 <TouchableOpacity
-                  onPress={clearSearch}
-                  style={styles.clearButton}
+                  onPress={closeSearch}
+                  style={styles.closeButton}
+                  activeOpacity={0.7}
                 >
-                  <Ionicons name="close-circle" size={20} color="#999" />
+                  <Ionicons name="close" size={28} color="#fff" />
                 </TouchableOpacity>
+              </Animated.View>
+            </View>
+
+            {/* Search Results */}
+            <Animated.View
+              style={[styles.searchContent, { opacity: contentOpacity }]}
+            >
+              {searchText.trim() === '' ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="search-outline" size={48} color="#8a9fb5" />
+                  <Text style={styles.emptyStateTitle}>Start Searching</Text>
+                  <Text style={styles.emptyStateText}>
+                    Type product name to search
+                  </Text>
+                </View>
+              ) : isSearchLoading ? (
+                <View style={styles.shimmerContainer}>
+                  <View style={styles.shimmerGrid}>
+                    {[1, 2].map(key => (
+                      <View
+                        key={key}
+                        style={[
+                          styles.productCardWrapper,
+                          styles.searchProductWrapper,
+                        ]}
+                      >
+                        <ShimmerProductsCard variant="home" />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : searchResults.length > 0 ? (
+                <FlatList
+                  data={searchResults}
+                  renderItem={renderSearchResult}
+                  keyExtractor={(item, index) => item.id || `${index}`}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  numColumns={2}
+                  columnWrapperStyle={styles.searchColumnWrapper}
+                  contentContainerStyle={styles.searchFlatListContent}
+                />
+              ) : (
+                <View style={styles.emptyState}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={48}
+                    color="#8a9fb5"
+                  />
+                  <Text style={styles.emptyStateTitle}>No Results</Text>
+                  <Text style={styles.emptyStateText}>
+                    Try searching for something else
+                  </Text>
+                </View>
+              )}
+            </Animated.View>
+          </Animated.View>
+        )}
+
+        {/* Filter Button Row - Only show when search NOT active */}
+        {!isSearchActive && (
+          <View style={styles.filterSection}>
+            <View style={styles.filterRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  setColumnModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
+                  style={styles.filterButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Image
+                    source={require('../../assets/four_squares.png')}
+                    style={styles.filterIcon}
+                  />
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {showCategoryChips && selectedCategories.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chipsScroll}
+                  contentContainerStyle={styles.chipsScrollContent}
+                >
+                  <CategoryChips
+                    categories={selectedCategories}
+                    onRemove={cat =>
+                      setVisibleColumns(prev =>
+                        (prev || []).filter(k => String(k) !== String(cat.id)),
+                      )
+                    }
+                  />
+                </ScrollView>
               )}
             </View>
           </View>
         )}
 
-        {/* Filter Button Row */}
-        <View style={styles.filterSection}>
-          <View style={styles.filterRow}>
-            <TouchableOpacity
-              onPress={() => {
-                setColumnModalVisible(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
-                style={styles.filterButton}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Image
-                  source={require('../../assets/four_squares.png')}
-                  style={styles.filterIcon}
-                />
-              </LinearGradient>
-            </TouchableOpacity>
-
-            {showCategoryChips && selectedCategories.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.chipsScroll}
-                contentContainerStyle={styles.chipsScrollContent}
-              >
-                <CategoryChips
-                  categories={selectedCategories}
-                  onRemove={cat =>
-                    setVisibleColumns(prev =>
-                      (prev || []).filter(k => String(k) !== String(cat.id)),
-                    )
-                  }
-                />
-              </ScrollView>
-            )}
-          </View>
-        </View>
-
-        {!loadingProducts &&
-        (!filteredProducts || filteredProducts.length === 0) ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>
-              {searchText
-                ? `No products found for "${searchText}"`
-                : visibleColumns.length > 0
-                ? 'No products in selected categories'
-                : 'No products available'}
-            </Text>
-            <Text style={styles.emptyMessage}>
-              {searchText
-                ? 'Try different search terms'
-                : visibleColumns.length > 0
-                ? 'Try selecting different categories'
-                : 'Check back later for new products'}
-            </Text>
-            {(visibleColumns.length > 0 || searchText) && (
-              <TouchableOpacity
-                onPress={() => {
-                  setVisibleColumns([]);
-                  setSearchText('');
+        {/* Products List - Only show when search NOT active */}
+        {!isSearchActive && (
+          <>
+            {!loadingProducts &&
+            (!filteredProducts || filteredProducts.length === 0) ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>
+                  {searchText
+                    ? `No products found for "${searchText}"`
+                    : visibleColumns.length > 0
+                    ? 'No products in selected categories'
+                    : 'No products available'}
+                </Text>
+                <Text style={styles.emptyMessage}>
+                  {searchText
+                    ? 'Try different search terms'
+                    : visibleColumns.length > 0
+                    ? 'Try selecting different categories'
+                    : 'Check back later for new products'}
+                </Text>
+                {(visibleColumns.length > 0 || searchText) && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setVisibleColumns([]);
+                      setSearchText('');
+                    }}
+                    style={styles.showAllButton}
+                  >
+                    <Text style={styles.showAllButtonText}>
+                      Show All Products
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <FlatList
+                ref={flatListRef}
+                data={filteredProducts}
+                keyExtractor={item => String(item.id)}
+                numColumns={2}
+                key="two-column-grid"
+                renderItem={({ item }) => {
+                  return (
+                    <View style={styles.productCardWrapper}>
+                      <ProductCard
+                        id={item.id}
+                        name={item.name}
+                        description={item.description}
+                        price={item.price}
+                        imageUri={item.imageUri}
+                        currencySymbol="₹"
+                        isFavorite={item.isFavorite}
+                        inCart={item.inCart}
+                        cartQuantity={item.cartQuantity}
+                        disabledAdd={item.disabledAdd}
+                        loadingAdd={item.loadingAdd}
+                        onToggleFavorite={() => toggleWishlistLocal(item)}
+                        onAddToCart={() => addToCartLocal(item)}
+                        onPress={() => onPressProduct(item)}
+                      />
+                    </View>
+                  );
                 }}
-                style={styles.showAllButton}
-              >
-                <Text style={styles.showAllButtonText}>Show All Products</Text>
-              </TouchableOpacity>
+                columnWrapperStyle={styles.columnWrapper}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.flatListContent}
+                onEndReached={() => fetchProducts(false)}
+                onEndReachedThreshold={0.5}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+              />
             )}
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={filteredProducts}
-            keyExtractor={item => String(item.id)}
-            numColumns={2}
-            key="two-column-grid"
-            renderItem={({ item }) => {
-              return (
-                <View style={styles.productCardWrapper}>
-                  <ProductCard
-                    id={item.id}
-                    name={item.name}
-                    description={item.description}
-                    price={item.price}
-                    imageUri={item.imageUri}
-                    currencySymbol="₹"
-                    isFavorite={item.isFavorite}
-                    inCart={item.inCart}
-                    cartQuantity={item.cartQuantity}
-                    disabledAdd={item.disabledAdd}
-                    loadingAdd={item.loadingAdd}
-                    onToggleFavorite={() => toggleWishlistLocal(item)}
-                    onAddToCart={() => addToCartLocal(item)}
-                    onPress={() => onPressProduct(item)}
-                  />
-                </View>
-              );
-            }}
-            columnWrapperStyle={styles.columnWrapper}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.flatListContent}
-            onEndReached={() => fetchProducts(false)}
-            onEndReachedThreshold={0.5}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-          />
+          </>
         )}
+
         <ScrollToTopButton visible={showScrollToTop} onPress={scrollToTop} />
         <CustomAlert
           visible={alert.visible}
@@ -562,43 +802,169 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  shimmerContainer: {
-    flex: 1,
-    paddingTop: 16,
-  },
-  shimmerGrid: {
+  // ✅ NEW SEARCH STYLES
+  headerBar: {
+    height: HEADER_HEIGHT,
+    backgroundColor: '#353F54',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-evenly',
-    paddingHorizontal: 8,
-    paddingLeft: 25,
-  },
-  searchSection: {
-    backgroundColor: 'rgba(42, 56, 71, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: STATUS_BAR_HEIGHT,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  searchButton: {
+    padding: 8,
+  },
+  searchContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 999,
+      },
+    }),
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)', // ✅ Match theme
+    backgroundColor: '#353F54', // ✅ Match theme
+    minHeight: 70,
   },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // ✅ Match home search style
     borderRadius: 12,
     paddingHorizontal: 12,
+    height: 44,
+    gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.3)',
-  },
-  searchIcon: {
-    marginRight: 8,
+    borderColor: 'rgba(79, 195, 247, 0.3)', // ✅ Match theme
   },
   searchInput: {
     flex: 1,
-    height: 44,
-    color: '#fff',
     fontSize: 16,
+    color: '#fff', // ✅ White text
+    paddingVertical: 0,
   },
-  clearButton: {
-    padding: 4,
+  iconWrapper: {
+    position: 'absolute',
+    left: 16,
+    top: STATUS_BAR_HEIGHT + (HEADER_HEIGHT - STATUS_BAR_HEIGHT - 40) / 2,
+  },
+  closeButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  searchContent: {
+    flex: 1,
+    paddingTop: 16,
+    backgroundColor: '#353F54', // ✅ Match home theme
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff', // ✅ White text
+    marginTop: 12,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#8a9fb5', // ✅ Match theme secondary text
+    textAlign: 'center',
+  },
+  searchProductCardWrapper: {
+    flex: 1,
+    margin: 6,
+  },
+  searchColumnWrapper: {
+    justifyContent: 'space-evenly',
+    paddingLeft: 25,
+  },
+  searchFlatListContent: {
+    paddingBottom: 20,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    gap: 12,
+  },
+  resultImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  resultContent: {
+    flex: 1,
+  },
+  resultTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 4,
+  },
+  resultPrice: {
+    fontSize: 14,
+    color: '#4fc3f7',
+    fontWeight: '600',
+  },
+  // ✅ END NEW STYLES
+  shimmerContainer: {
+    flex: 1,
+    paddingTop: 8,
+    backgroundColor: '#353F54',
+  },
+  shimmerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingLeft: 25,
+  },
+  searchShimmerContainer: {
+    backgroundColor: '#353F54',
+    paddingHorizontal: 16,
+  },
+  searchShimmerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  searchProductWrapper: {
+    width: '48%',
+    marginVertical: 8,
   },
   filterSection: {
     backgroundColor: 'rgba(42, 56, 71, 0.5)',
@@ -629,7 +995,6 @@ const styles = StyleSheet.create({
     height: 18,
     tintColor: '#fff',
   },
-  // NEW SHIMMER STYLES
   filterButtonShimmer: {
     width: 38,
     height: 38,
@@ -648,7 +1013,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: '#4a5568',
   },
-  // END NEW SHIMMER STYLES
   chipsScroll: {
     flex: 1,
     marginRight: 12,
