@@ -4,7 +4,6 @@ import React, {
   useMemo,
   useCallback,
   useState,
-  useLayoutEffect,
   useRef,
 } from 'react';
 import {
@@ -12,7 +11,6 @@ import {
   FlatList,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
   ImageBackground,
   StyleSheet,
@@ -50,14 +48,14 @@ export default function Home({ navigation, route }) {
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const [showCategoryChips, setShowCategoryChips] = useState(false);
 
-  // ✅ NEW: Animated search states
+  // ✅ REFACTORED: Animated search states (removed searchResults and isSearchLoading)
   const [isSearchActive, setIsSearchActive] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearchLoading, setIsSearchLoading] = useState(false);
   const searchAnimation = useRef(new Animated.Value(0)).current;
-
   const [searchText, setSearchText] = useState('');
-  const [debouncedSearchText, setDebouncedSearchText] = useState('');
+
+  // ✅ NEW: Debounce state for shimmer effect only
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
 
   const [alert, setAlert] = useState({ visible: false });
   const showCustomAlert = (title, message, type = 'info', buttons = []) =>
@@ -69,8 +67,7 @@ export default function Home({ navigation, route }) {
     fetchPage: fetchProducts,
     loadingInitial: loadingProducts,
     error: productsError,
-    reset: resetProducts,
-  } = usePaginatedQuery('products', 50, debouncedSearchText, {
+  } = usePaginatedQuery('products', 50, '', {
     column: 'created_at',
     ascending: false,
   });
@@ -107,15 +104,12 @@ export default function Home({ navigation, route }) {
   }, []);
 
   useEffect(() => {
-    // ✅ Listen for openSearchNow param
     if (route?.params?.openSearchNow) {
       openSearch();
-      // Reset the param
       navigation.setParams({ openSearchNow: false });
     }
   }, [route?.params?.openSearchNow]);
 
-  // ✅ NEW: Handle animated search
   const openSearch = () => {
     setIsSearchActive(true);
     navigation.getParent()?.setParams({ hideTabBar: true });
@@ -131,21 +125,16 @@ export default function Home({ navigation, route }) {
 
   const closeSearch = () => {
     Keyboard.dismiss();
-
-    // Set states immediately for a snappier feel
-    setSearchResults([]);
     setSearchText('');
+    setIsTyping(false);
     navigation.getParent()?.setParams({ hideTabBar: false });
 
-    // Use sequence for smoother transition
     Animated.sequence([
-      // Quick fade out of search content
       Animated.timing(searchAnimation, {
         toValue: 0.5,
         duration: 100,
         useNativeDriver: false,
       }),
-      // Faster collapse of search container
       Animated.timing(searchAnimation, {
         toValue: 0,
         duration: 150,
@@ -158,7 +147,7 @@ export default function Home({ navigation, route }) {
     });
   };
 
-  // ✅ NEW: Search animation interpolations
+  // Search animation interpolations
   const searchContainerHeight = searchAnimation.interpolate({
     inputRange: [0, 0.3, 1],
     outputRange: [0, HEADER_HEIGHT, height],
@@ -207,59 +196,6 @@ export default function Home({ navigation, route }) {
     extrapolate: 'clamp',
   });
 
-  // ✅ NEW: Handle search
-  const handleSearch = useCallback(
-    async query => {
-      if (!query.trim()) {
-        setSearchResults([]);
-        setIsSearchLoading(false);
-        return;
-      }
-
-      try {
-        // Search from your products data
-        const filtered = products.filter(p =>
-          p.name.toLowerCase().includes(query.toLowerCase()),
-        );
-        // Small delay to ensure shimmer is visible
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setSearchResults(filtered);
-      } catch (err) {
-        console.error('[Search error]:', err);
-      } finally {
-        setIsSearchLoading(false);
-      }
-    },
-    [products],
-  );
-
-  // Effect for handling search input changes
-  useEffect(() => {
-    let searchHandler;
-    const currentSearchText = searchText; // Capture current value
-
-    if (isSearchActive && currentSearchText !== undefined) {
-      // Only show loading for non-empty searches
-      if (currentSearchText.trim()) {
-        setIsSearchLoading(true);
-
-        searchHandler = setTimeout(() => {
-          handleSearch(currentSearchText);
-        }, 500);
-      } else {
-        // Clear results immediately for empty search
-        setSearchResults([]);
-        setIsSearchLoading(false);
-      }
-    }
-
-    return () => {
-      if (searchHandler) {
-        clearTimeout(searchHandler);
-      }
-    };
-  }, [searchText, isSearchActive, handleSearch]);
-
   useEffect(() => {
     const req = route?.params?.openColumnModalRequest;
     if (req) {
@@ -299,7 +235,7 @@ export default function Home({ navigation, route }) {
     async p => {
       setLoadingCartIds(prev => new Set(prev).add(p.id));
       try {
-        const result = await addToCart(p);
+        await addToCart(p);
       } catch (e) {
         console.error('[Add to cart error]:', e);
         showCustomAlert('Cart', e?.message ?? 'Failed to add to cart', 'error');
@@ -318,7 +254,7 @@ export default function Home({ navigation, route }) {
     async p => {
       setLoadingWishIds(prev => new Set(prev).add(p.id));
       try {
-        const result = await toggleWishlist(p);
+        await toggleWishlist(p);
       } catch (e) {
         console.error('[Wishlist error]:', e);
         showCustomAlert(
@@ -340,7 +276,7 @@ export default function Home({ navigation, route }) {
   const mappedProducts = useMemo(() => {
     if (!products) return [];
 
-    const mapped = products.map(p => {
+    return products.map(p => {
       const imageUri = getProductPrimaryImage(p);
 
       return {
@@ -360,8 +296,6 @@ export default function Home({ navigation, route }) {
         raw: p,
       };
     });
-
-    return mapped;
   }, [products, isInWishlist, isInCart, getQuantity, loadingCartIds]);
 
   const filteredProducts = useMemo(() => {
@@ -369,16 +303,31 @@ export default function Home({ navigation, route }) {
     if (!visibleColumns || visibleColumns.length === 0) return mappedProducts;
 
     const visibleSet = new Set(visibleColumns.map(String));
-    const filtered = mappedProducts.filter(p => {
+    return mappedProducts.filter(p => {
       const cats = p.categories;
       if (!cats || cats.length === 0) {
         return visibleSet.has('others');
       }
       return cats.some(cid => visibleSet.has(String(cid)));
     });
-
-    return filtered;
   }, [mappedProducts, visibleColumns]);
+
+  // ✅ NEW: Instant search results using useMemo (NO loading states!)
+  const searchResults = useMemo(() => {
+    if (!searchText.trim() || !mappedProducts.length) {
+      return [];
+    }
+
+    const query = searchText.toLowerCase();
+    const filtered = mappedProducts.filter(p =>
+      p.name.toLowerCase().includes(query),
+    );
+
+    console.log(
+      `[Search] Query: "${searchText}" | Results: ${filtered.length}`,
+    );
+    return filtered;
+  }, [searchText, mappedProducts]);
 
   const selectedCategories = useMemo(() => {
     if (!columns || columns.length === 0) return [];
@@ -420,33 +369,57 @@ export default function Home({ navigation, route }) {
     setShowScrollToTop(scrollY > 200);
   }, []);
 
-  // ✅ NEW: Render search results
-  const renderSearchResult = ({ item }) => {
-    const imageUri = getProductPrimaryImage(item);
-    return (
-      <View style={styles.searchProductCardWrapper}>
-        <ProductCard
-          id={item.id}
-          name={item.name}
-          description={item.description}
-          price={item.price}
-          imageUri={imageUri}
-          currencySymbol="₹"
-          isFavorite={isInWishlist(item.id)}
-          inCart={isInCart(item.id)}
-          cartQuantity={getQuantity(item.id)}
-          disabledAdd={(item.quantity ?? 0) <= 0 || isInCart(item.id)}
-          loadingAdd={loadingCartIds.has(item.id)}
-          onToggleFavorite={() => toggleWishlistLocal(item)}
-          onAddToCart={() => addToCartLocal(item)}
-          onPress={() => {
-            closeSearch();
-            onPressProduct(item);
-          }}
-        />
-      </View>
-    );
-  };
+  // ✅ ADD THIS:
+  const handleSearchTextChange = useCallback(text => {
+    setSearchText(text);
+
+    if (text.trim()) {
+      setIsTyping(true);
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+      }, 300);
+    } else {
+      setIsTyping(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
+  }, []);
+
+  const renderSearchResult = useCallback(
+    ({ item }) => {
+      const imageUri = getProductPrimaryImage(item.raw || item);
+      return (
+        <View style={styles.searchProductCardWrapper}>
+          <ProductCard
+            id={item.id}
+            name={item.name}
+            description={item.description}
+            price={item.price}
+            imageUri={imageUri}
+            currencySymbol="₹"
+            isFavorite={item.isFavorite}
+            inCart={item.inCart}
+            cartQuantity={item.cartQuantity}
+            disabledAdd={item.disabledAdd}
+            loadingAdd={item.loadingAdd}
+            onToggleFavorite={() => toggleWishlistLocal(item.raw || item)}
+            onAddToCart={() => addToCartLocal(item.raw || item)}
+            onPress={() => {
+              closeSearch();
+              onPressProduct(item);
+            }}
+          />
+        </View>
+      );
+    },
+    [toggleWishlistLocal, addToCartLocal, onPressProduct, closeSearch],
+  );
 
   if (loadingProducts && (!products || products.length === 0)) {
     return (
@@ -456,7 +429,6 @@ export default function Home({ navigation, route }) {
           style={styles.backgroundImage}
           resizeMode="cover"
         >
-          {/* Shimmer for Filter Section */}
           <View style={styles.filterSection}>
             <View style={styles.filterRow}>
               <ShimmerPlaceholder
@@ -524,7 +496,7 @@ export default function Home({ navigation, route }) {
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        {/* ✅ Animated Search Overlay - Only visible when animation is significant */}
+        {/* ✅ Animated Search Overlay */}
         {(isSearchActive || searchAnimation._value > 0.1) && (
           <Animated.View
             style={[
@@ -554,12 +526,12 @@ export default function Home({ navigation, route }) {
                   placeholder="Search products..."
                   placeholderTextColor="#999"
                   value={searchText}
-                  onChangeText={setSearchText}
+                  onChangeText={handleSearchTextChange}
                   returnKeyType="search"
                   autoCorrect={false}
                 />
                 {searchText.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchText('')}>
+                  <TouchableOpacity onPress={() => handleSearchTextChange('')}>
                     <Ionicons name="close-circle" size={20} color="#999" />
                   </TouchableOpacity>
                 )}
@@ -583,11 +555,12 @@ export default function Home({ navigation, route }) {
               </Animated.View>
             </View>
 
-            {/* Search Results */}
+            {/* ✅ REFACTORED: Search Results with instant filtering */}
             <Animated.View
               style={[styles.searchContent, { opacity: contentOpacity }]}
             >
               {searchText.trim() === '' ? (
+                // Empty state
                 <View style={styles.emptyState}>
                   <Ionicons name="search-outline" size={48} color="#8a9fb5" />
                   <Text style={styles.emptyStateTitle}>Start Searching</Text>
@@ -595,7 +568,8 @@ export default function Home({ navigation, route }) {
                     Type product name to search
                   </Text>
                 </View>
-              ) : isSearchLoading ? (
+              ) : isTyping ? (
+                // Optional shimmer while typing (for UX smoothness)
                 <View style={styles.shimmerContainer}>
                   <View style={styles.shimmerGrid}>
                     {[1, 2].map(key => (
@@ -612,10 +586,13 @@ export default function Home({ navigation, route }) {
                   </View>
                 </View>
               ) : searchResults.length > 0 ? (
+                // Results found - show instantly
                 <FlatList
                   data={searchResults}
                   renderItem={renderSearchResult}
-                  keyExtractor={(item, index) => item.id || `${index}`}
+                  keyExtractor={(item, index) =>
+                    item.id?.toString() || `${index}`
+                  }
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                   numColumns={2}
@@ -623,6 +600,7 @@ export default function Home({ navigation, route }) {
                   contentContainerStyle={styles.searchFlatListContent}
                 />
               ) : (
+                // No results - show instantly after typing stops
                 <View style={styles.emptyState}>
                   <Ionicons
                     name="alert-circle-outline"
@@ -639,14 +617,12 @@ export default function Home({ navigation, route }) {
           </Animated.View>
         )}
 
-        {/* Filter Button Row - Only show when search NOT active */}
+        {/* Filter Button Row */}
         {!isSearchActive && (
           <View style={styles.filterSection}>
             <View style={styles.filterRow}>
               <TouchableOpacity
-                onPress={() => {
-                  setColumnModalVisible(true);
-                }}
+                onPress={() => setColumnModalVisible(true)}
                 activeOpacity={0.8}
               >
                 <LinearGradient
@@ -683,32 +659,25 @@ export default function Home({ navigation, route }) {
           </View>
         )}
 
-        {/* Products List - Only show when search NOT active */}
+        {/* Products List */}
         {!isSearchActive && (
           <>
             {!loadingProducts &&
             (!filteredProducts || filteredProducts.length === 0) ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyTitle}>
-                  {searchText
-                    ? `No products found for "${searchText}"`
-                    : visibleColumns.length > 0
+                  {visibleColumns.length > 0
                     ? 'No products in selected categories'
                     : 'No products available'}
                 </Text>
                 <Text style={styles.emptyMessage}>
-                  {searchText
-                    ? 'Try different search terms'
-                    : visibleColumns.length > 0
+                  {visibleColumns.length > 0
                     ? 'Try selecting different categories'
                     : 'Check back later for new products'}
                 </Text>
-                {(visibleColumns.length > 0 || searchText) && (
+                {visibleColumns.length > 0 && (
                   <TouchableOpacity
-                    onPress={() => {
-                      setVisibleColumns([]);
-                      setSearchText('');
-                    }}
+                    onPress={() => setVisibleColumns([])}
                     style={styles.showAllButton}
                   >
                     <Text style={styles.showAllButtonText}>
@@ -724,28 +693,26 @@ export default function Home({ navigation, route }) {
                 keyExtractor={item => String(item.id)}
                 numColumns={2}
                 key="two-column-grid"
-                renderItem={({ item }) => {
-                  return (
-                    <View style={styles.productCardWrapper}>
-                      <ProductCard
-                        id={item.id}
-                        name={item.name}
-                        description={item.description}
-                        price={item.price}
-                        imageUri={item.imageUri}
-                        currencySymbol="₹"
-                        isFavorite={item.isFavorite}
-                        inCart={item.inCart}
-                        cartQuantity={item.cartQuantity}
-                        disabledAdd={item.disabledAdd}
-                        loadingAdd={item.loadingAdd}
-                        onToggleFavorite={() => toggleWishlistLocal(item)}
-                        onAddToCart={() => addToCartLocal(item)}
-                        onPress={() => onPressProduct(item)}
-                      />
-                    </View>
-                  );
-                }}
+                renderItem={({ item }) => (
+                  <View style={styles.productCardWrapper}>
+                    <ProductCard
+                      id={item.id}
+                      name={item.name}
+                      description={item.description}
+                      price={item.price}
+                      imageUri={item.imageUri}
+                      currencySymbol="₹"
+                      isFavorite={item.isFavorite}
+                      inCart={item.inCart}
+                      cartQuantity={item.cartQuantity}
+                      disabledAdd={item.disabledAdd}
+                      loadingAdd={item.loadingAdd}
+                      onToggleFavorite={() => toggleWishlistLocal(item)}
+                      onAddToCart={() => addToCartLocal(item)}
+                      onPress={() => onPressProduct(item)}
+                    />
+                  </View>
+                )}
                 columnWrapperStyle={styles.columnWrapper}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.flatListContent}
@@ -802,7 +769,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  // ✅ NEW SEARCH STYLES
   headerBar: {
     height: HEADER_HEIGHT,
     backgroundColor: '#353F54',
@@ -846,25 +812,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)', // ✅ Match theme
-    backgroundColor: '#353F54', // ✅ Match theme
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#353F54',
     minHeight: 70,
   },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)', // ✅ Match home search style
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 44,
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.3)', // ✅ Match theme
+    borderColor: 'rgba(79, 195, 247, 0.3)',
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#fff', // ✅ White text
+    color: '#fff',
     paddingVertical: 0,
   },
   iconWrapper: {
@@ -879,7 +845,7 @@ const styles = StyleSheet.create({
   searchContent: {
     flex: 1,
     paddingTop: 16,
-    backgroundColor: '#353F54', // ✅ Match home theme
+    backgroundColor: '#353F54',
   },
   emptyState: {
     flex: 1,
@@ -891,12 +857,12 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#fff', // ✅ White text
+    color: '#fff',
     marginTop: 12,
   },
   emptyStateText: {
     fontSize: 14,
-    color: '#8a9fb5', // ✅ Match theme secondary text
+    color: '#8a9fb5',
     textAlign: 'center',
   },
   searchProductCardWrapper: {
@@ -910,36 +876,6 @@ const styles = StyleSheet.create({
   searchFlatListContent: {
     paddingBottom: 20,
   },
-  resultItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    gap: 12,
-  },
-  resultImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  resultContent: {
-    flex: 1,
-  },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
-  },
-  resultPrice: {
-    fontSize: 14,
-    color: '#4fc3f7',
-    fontWeight: '600',
-  },
-  // ✅ END NEW STYLES
   shimmerContainer: {
     flex: 1,
     paddingTop: 8,
@@ -951,16 +887,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingLeft: 25,
-  },
-  searchShimmerContainer: {
-    backgroundColor: '#353F54',
-    paddingHorizontal: 16,
-  },
-  searchShimmerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
   },
   searchProductWrapper: {
     width: '48%',
