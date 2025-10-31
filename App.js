@@ -23,9 +23,7 @@ function RootNavigator() {
       try {
         const NavigationBar = require('react-native-navigation-bar-color');
         NavigationBar.default.setNavigationBarColor('#353F54', false, true);
-      } catch (error) {
-        console.log('[Navigation bar color not set]:', error.message);
-      }
+      } catch (error) {}
     }
   }, []);
 
