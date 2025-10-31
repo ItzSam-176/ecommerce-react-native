@@ -1,5 +1,11 @@
 // src/screens/customer/ProductDiscoveryScreen.js
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react';
 import {
   View,
   Text,
@@ -245,11 +251,40 @@ function ProductDiscoveryContent({ navigation, route }) {
     ) {
       fetchPage();
     }
-  }, [index, hasMore, loadingInitial, loadingMore, allProducts?.length]);
+  }, [
+    index,
+    hasMore,
+    loadingInitial,
+    loadingMore,
+    allProducts?.length,
+    fetchPage,
+  ]);
 
   const getImageUrl = p => getProductPrimaryImage(p);
 
-  const handleHeartPress = async () => {
+  // ✅ ADDED: Memoize category picker item render
+  const renderPickerItem = useCallback(
+    ({ item }) => (
+      <TouchableOpacity
+        style={styles.pickerItem}
+        onPress={() => {
+          const nid = normalizeCategoryId(item.id == null ? null : item.id);
+          setSelectedCategoryId(nid);
+          setSelectedCategoryName(item.name ?? 'Category');
+          setPickerOpen(false);
+        }}
+      >
+        <Text style={styles.pickerItemText}>{item.name ?? 'Category'}</Text>
+        {((item.id === null && selectedCategoryId === null) ||
+          item.id === selectedCategoryId) && (
+          <Ionicons name="checkmark" size={20} color="#4CAF50" />
+        )}
+      </TouchableOpacity>
+    ),
+    [selectedCategoryId],
+  );
+  // ✅ ADDED: Memoize callback for heart press
+  const handleHeartPress = useCallback(async () => {
     if (!frontProduct) return;
 
     const productId = frontProduct.id;
@@ -264,9 +299,9 @@ function ProductDiscoveryContent({ navigation, route }) {
       newSet.delete(productId);
       return newSet;
     });
-  };
+  }, [frontProduct, optimisticWishlist, toggleWishlist, isInWishlist]);
 
-  const handleSwipeWishlist = async () => {
+  const handleSwipeWishlist = useCallback(async () => {
     if (!frontProduct) return;
 
     const productId = frontProduct.id;
@@ -290,12 +325,15 @@ function ProductDiscoveryContent({ navigation, route }) {
       newSet.delete(productId);
       return newSet;
     });
-  };
+  }, [frontProduct, optimisticWishlist, toggleWishlist, isInWishlist]);
+  // ✅ ADDED: Memoize current wishlist status
+  const currentIsInWishlist = useMemo(() => {
+    return frontProduct
+      ? optimisticWishlist.has(frontProduct.id) || isInWishlist(frontProduct.id)
+      : false;
+  }, [frontProduct, optimisticWishlist, isInWishlist]);
 
-  const currentIsInWishlist = frontProduct
-    ? optimisticWishlist.has(frontProduct.id) || isInWishlist(frontProduct.id)
-    : false;
-
+  // ✅ REFACTORED: Memoize gesture handler callbacks
   const jsSetNeighbor = (dir, iNeighbor) => {
     const p = products?.[iNeighbor] ?? null;
     if (!p) return;
@@ -309,7 +347,6 @@ function ProductDiscoveryContent({ navigation, route }) {
       backOpacity.value = 1;
     }
   };
-
   const jsCommitIndex = iNew => {
     setIndex(iNew);
   };
@@ -319,109 +356,123 @@ function ProductDiscoveryContent({ navigation, route }) {
     setBackProduct(null);
     setBackDirection(0);
   };
+  const panGestureHandler = useAnimatedGestureHandler(
+    {
+      onStart: () => {
+        runOnJS(setPickerOpen)(false);
+      },
+      onActive: e => {
+        frontX.value = e.translationX;
 
-  const panGestureHandler = useAnimatedGestureHandler({
-    onStart: () => {
-      runOnJS(setPickerOpen)(false);
-    },
-    onActive: e => {
-      frontX.value = e.translationX;
-
-      if (e.translationX < 0) {
-        const iNext = boundedIndex + 1;
-        if (iNext < total && backDirection !== -1) {
-          runOnJS(jsSetNeighbor)(-1, iNext);
-        }
-        backX.value = Math.max(0, width + e.translationX * 0.85);
-      } else if (e.translationX > 0) {
-        const iPrev = boundedIndex - 1;
-        if (iPrev >= 0 && backDirection !== 1) {
-          runOnJS(jsSetNeighbor)(1, iPrev);
-        }
-        backX.value = Math.min(0, -width + e.translationX * 0.85);
-      } else {
-        backX.value = 0;
-      }
-    },
-    onEnd: e => {
-      const dx = e.translationX;
-      const vx = e.velocityX;
-      const dy = e.translationY;
-      const vy = e.velocityY;
-
-      const goNext = dx < -SWIPE_THRESHOLD || vx < -VELOCITY_THRESHOLD;
-      const goPrev = dx > SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
-      const goUp = dy < -SWIPE_THRESHOLD * 0.6 || vy < -VELOCITY_THRESHOLD;
-      const goDown = dy > SWIPE_THRESHOLD * 0.6 || vy > VELOCITY_THRESHOLD;
-
-      const iNow = currentIndex.value;
-      const totalNow = total;
-
-      if (goNext && iNow < totalNow - 1) {
-        frontX.value = withTiming(-width, { duration: 180 });
-        backX.value = withTiming(0, { duration: 180 });
-
-        frontOpacity.value = withTiming(0, { duration: 180 }, finished => {
-          if (!finished) return;
-          const iNew = Math.min(iNow + 1, totalNow - 1);
-          runOnJS(jsCommitIndex)(iNew);
-          runOnJS(jsSwapCards)();
-          frontX.value = 0;
+        if (e.translationX < 0) {
+          const iNext = boundedIndex + 1;
+          if (iNext < total && backDirection !== -1) {
+            runOnJS(jsSetNeighbor)(-1, iNext);
+          }
+          backX.value = Math.max(0, width + e.translationX * 0.85);
+        } else if (e.translationX > 0) {
+          const iPrev = boundedIndex - 1;
+          if (iPrev >= 0 && backDirection !== 1) {
+            runOnJS(jsSetNeighbor)(1, iPrev);
+          }
+          backX.value = Math.min(0, -width + e.translationX * 0.85);
+        } else {
           backX.value = 0;
-          frontOpacity.value = withTiming(1, { duration: 100 });
-          backOpacity.value = 0;
-        });
-        return;
-      }
+        }
+      },
+      onEnd: e => {
+        const dx = e.translationX;
+        const vx = e.velocityX;
+        const dy = e.translationY;
+        const vy = e.velocityY;
 
-      if (goPrev && iNow > 0) {
-        frontX.value = withTiming(width, { duration: 180 });
-        backX.value = withTiming(0, { duration: 180 });
+        const goNext = dx < -SWIPE_THRESHOLD || vx < -VELOCITY_THRESHOLD;
+        const goPrev = dx > SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
+        const goUp = dy < -SWIPE_THRESHOLD * 0.6 || vy < -VELOCITY_THRESHOLD;
+        const goDown = dy > SWIPE_THRESHOLD * 0.6 || vy > VELOCITY_THRESHOLD;
 
-        frontOpacity.value = withTiming(0, { duration: 180 }, finished => {
-          if (!finished) return;
-          const iNew = Math.max(iNow - 1, 0);
-          runOnJS(jsCommitIndex)(iNew);
-          runOnJS(jsSwapCards)();
-          frontX.value = 0;
-          backX.value = 0;
-          frontOpacity.value = withTiming(1, { duration: 100 });
-          backOpacity.value = 0;
-        });
-        return;
-      }
+        const iNow = currentIndex.value;
+        const totalNow = total;
 
-      if (goUp && frontProduct) {
-        runOnJS(handleSwipeWishlist)();
+        if (goNext && iNow < totalNow - 1) {
+          frontX.value = withTiming(-width, { duration: 180 });
+          backX.value = withTiming(0, { duration: 180 });
+
+          frontOpacity.value = withTiming(0, { duration: 180 }, finished => {
+            if (!finished) return;
+            const iNew = Math.min(iNow + 1, totalNow - 1);
+            runOnJS(jsCommitIndex)(iNew);
+            runOnJS(jsSwapCards)();
+            frontX.value = 0;
+            backX.value = 0;
+            frontOpacity.value = withTiming(1, { duration: 100 });
+            backOpacity.value = 0;
+          });
+          return;
+        }
+
+        if (goPrev && iNow > 0) {
+          frontX.value = withTiming(width, { duration: 180 });
+          backX.value = withTiming(0, { duration: 180 });
+
+          frontOpacity.value = withTiming(0, { duration: 180 }, finished => {
+            if (!finished) return;
+            const iNew = Math.max(iNow - 1, 0);
+            runOnJS(jsCommitIndex)(iNew);
+            runOnJS(jsSwapCards)();
+            frontX.value = 0;
+            backX.value = 0;
+            frontOpacity.value = withTiming(1, { duration: 100 });
+            backOpacity.value = 0;
+          });
+          return;
+        }
+
+        if (goUp && frontProduct) {
+          runOnJS(handleSwipeWishlist)();
+          frontX.value = withSpring(0);
+          backX.value = withSpring(
+            backDirection === -1 ? width : backDirection === 1 ? -width : 0,
+          );
+          backOpacity.value = withSpring(0);
+          return;
+        }
+
+        if (goDown && frontProduct) {
+          runOnJS(addToCart)(frontProduct);
+          frontX.value = withSpring(0);
+          backX.value = withSpring(
+            backDirection === -1 ? width : backDirection === 1 ? -width : 0,
+          );
+          backOpacity.value = withSpring(0);
+          return;
+        }
+
         frontX.value = withSpring(0);
         backX.value = withSpring(
           backDirection === -1 ? width : backDirection === 1 ? -width : 0,
+          {},
+          () => {
+            backOpacity.value = 0;
+            runOnJS(setBackProduct)(null);
+            runOnJS(setBackDirection)(0);
+          },
         );
-        backOpacity.value = withSpring(0);
-        return;
-      }
-      if (goDown && frontProduct) {
-        runOnJS(addToCart)(frontProduct);
-        frontX.value = withSpring(0);
-        backX.value = withSpring(
-          backDirection === -1 ? width : backDirection === 1 ? -width : 0,
-        );
-        backOpacity.value = withSpring(0);
-        return;
-      }
-
-      frontX.value = withSpring(0);
-      backX.value = withSpring(
-        backDirection === -1 ? width : backDirection === 1 ? -width : 0,
-        {},
-        () => {
-          backOpacity.value = 0;
-          runOnJS(setBackProduct)(null);
-          runOnJS(setBackDirection)(0);
-        },
-      );
+      },
     },
-  });
+    [
+      jsSetNeighbor,
+      jsCommitIndex,
+      jsSwapCards,
+      handleSwipeWishlist,
+      frontProduct,
+      addToCart,
+      backDirection,
+      width,
+      total,
+      boundedIndex,
+    ],
+  );
 
   const frontStyle = useAnimatedStyle(() => ({
     transform: [
@@ -543,27 +594,7 @@ function ProductDiscoveryContent({ navigation, route }) {
             <FlatList
               data={categories}
               keyExtractor={c => (c && c.id != null ? String(c.id) : 'all')}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.pickerItem}
-                  onPress={() => {
-                    const nid = normalizeCategoryId(
-                      item.id == null ? null : item.id,
-                    );
-                    setSelectedCategoryId(nid);
-                    setSelectedCategoryName(item.name ?? 'Category');
-                    setPickerOpen(false);
-                  }}
-                >
-                  <Text style={styles.pickerItemText}>
-                    {item.name ?? 'Category'}
-                  </Text>
-                  {((item.id === null && selectedCategoryId === null) ||
-                    item.id === selectedCategoryId) && (
-                    <Ionicons name="checkmark" size={20} color="#4CAF50" />
-                  )}
-                </TouchableOpacity>
-              )}
+              renderItem={renderPickerItem}
               style={{ maxHeight: 5 * 52 }}
               showsVerticalScrollIndicator={false}
               onEndReached={() => fetchCategories?.()}

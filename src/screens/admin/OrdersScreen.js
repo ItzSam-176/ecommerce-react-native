@@ -163,8 +163,6 @@ export default function OrdersScreen({ navigation, route }) {
     const currentColumnCount = visibleColumns.length;
     const wasColumnAdded = currentColumnCount > previousColumnCount.current;
     const wasColumnRemoved = currentColumnCount < previousColumnCount.current;
-
-
     LayoutAnimation.configureNext(
       LayoutAnimation.create(
         250,
@@ -190,8 +188,7 @@ export default function OrdersScreen({ navigation, route }) {
     previousColumnCount.current = currentColumnCount;
   }, [visibleColumns]);
 
-  const handleStatusChange = async (orderId, newStatus) => {
-
+  const handleStatusChange = useCallback(async (orderId, newStatus) => {
     try {
       const { error } = await supabase
         .from('orders')
@@ -209,12 +206,11 @@ export default function OrdersScreen({ navigation, route }) {
           row.id === orderId ? { ...row, status: newStatus } : row,
         ),
       );
-
     } catch (err) {
       console.error('[Exception updating status]:', err);
       Alert.alert('Error', 'An error occurred while updating status');
     }
-  };
+  }, []);
 
   const sortedRows = useMemo(() => {
     if (!rows.length) return [];
@@ -312,55 +308,59 @@ export default function OrdersScreen({ navigation, route }) {
     };
   }, [sortedRows, visibleColumns, calculateColumnWidths]);
 
-  const handleHeaderPress = key => {
-    const isCurrentColumn = sortConfig.column === key;
+  const handleHeaderPress = useCallback(
+    key => {
+      const isCurrentColumn = sortConfig.column === key;
 
-    const isAtDefault =
-      sortConfig.column === 'created_at' &&
-      sortConfig.ascending === false &&
-      sortKey === 'CREATED_DESC';
+      const isAtDefault =
+        sortConfig.column === 'created_at' &&
+        sortConfig.ascending === false &&
+        sortKey === 'CREATED_DESC';
 
-    if (!isCurrentColumn) {
-      let newSortKey;
-      switch (key) {
-        case 'created_at':
-          newSortKey = 'CREATED_ASC';
-          break;
-        case 'quantity':
-          newSortKey = 'QTY_ASC';
-          break;
-        case 'total_price':
-          newSortKey = 'TOTAL_ASC';
-          break;
-        default:
-          return;
-      }
-      applySort(newSortKey);
-    } else {
-      if (key === 'created_at' && isAtDefault) {
-        applySort('CREATED_ASC');
-      } else if (sortConfig.ascending) {
+      if (!isCurrentColumn) {
         let newSortKey;
         switch (key) {
           case 'created_at':
-            newSortKey = 'CREATED_DESC';
+            newSortKey = 'CREATED_ASC';
             break;
           case 'quantity':
-            newSortKey = 'QTY_DESC';
+            newSortKey = 'QTY_ASC';
             break;
           case 'total_price':
-            newSortKey = 'TOTAL_DESC';
+            newSortKey = 'TOTAL_ASC';
             break;
           default:
             return;
         }
         applySort(newSortKey);
       } else {
-        resetSort();
+        if (key === 'created_at' && isAtDefault) {
+          applySort('CREATED_ASC');
+        } else if (sortConfig.ascending) {
+          let newSortKey;
+          switch (key) {
+            case 'created_at':
+              newSortKey = 'CREATED_DESC';
+              break;
+            case 'quantity':
+              newSortKey = 'QTY_DESC';
+              break;
+            case 'total_price':
+              newSortKey = 'TOTAL_DESC';
+              break;
+            default:
+              return;
+          }
+          applySort(newSortKey);
+        } else {
+          resetSort();
+        }
       }
-    }
-  };
+    },
+    [sortConfig.column, sortConfig.ascending, sortKey, applySort, resetSort],
+  );
 
+  // ✅ Add useCallback for sort icon render
   const renderSortIcon = key => {
     if (sortConfig.column !== key) return null;
 
@@ -374,17 +374,17 @@ export default function OrdersScreen({ navigation, route }) {
     );
   };
 
-  const handleApplyColumns = newSelection => {
+  const handleApplyColumns = useCallback(newSelection => {
     if (newSelection.length === 0) {
       setVisibleColumns(allColumns.map(c => c.key));
     } else {
       setVisibleColumns(newSelection);
     }
-  };
+  }, []);
 
-  const handleResetColumns = () => {
+  const handleResetColumns = useCallback(() => {
     setVisibleColumns(allColumns.map(c => c.key));
-  };
+  }, []);
 
   if (loading) {
     return (

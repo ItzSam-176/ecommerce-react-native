@@ -95,3 +95,5 @@
 139485	144067	1761896256148305030	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-safe-area-context/android/build/generated/source/codegen/jni/safeareacontext-generated.cpp.o	1d793414cf421609
 144067	144435	1761896256509879675	/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libreact_codegen_safeareacontext.so	3671399409ab48dd
 144436	145291	1761896257057682387	/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libappmodules.so	d4345e50a7373796
+0	200	0	/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/armeabi-v7a/CMakeFiles/cmake.verify_globs	67f8e5b72e935c22
+0	195	0	/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/armeabi-v7a/CMakeFiles/cmake.verify_globs	67f8e5b72e935c22

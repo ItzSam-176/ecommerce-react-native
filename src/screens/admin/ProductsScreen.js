@@ -68,7 +68,6 @@ export default function ProductsScreen({ navigation, route }) {
   // Listen for navigation events
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-
       // Check if coming back from Add/Edit screen
       if (navigation.getState().routes.some(r => r.params?.productChanged)) {
         reset();
@@ -86,10 +85,10 @@ export default function ProductsScreen({ navigation, route }) {
     return unsubscribe;
   }, [navigation]);
 
-  const handleScroll = e => {
+  const handleScroll = useCallback(e => {
     const offsetY = e.nativeEvent.contentOffset.y;
     setShowScrollTop(offsetY > 200);
-  };
+  }, []);
 
   useEffect(() => {
     if (route.params?.showSort) {
@@ -98,74 +97,72 @@ export default function ProductsScreen({ navigation, route }) {
     }
   }, [route.params?.showSort]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     reset();
     await fetchPage(true);
     setRefreshing(false);
-  };
+  }, [reset, fetchPage]);
 
-  const confirmDelete = id => {
-    showConfirm(
-      'Delete product',
-      'Delete this product?',
-      () => handleDelete(id),
-      { confirmText: 'Delete', destructive: true },
-    );
-  };
-
-  const handleDelete = async id => {
-    try {
-      // [Info]: Fetch product details first
-      const { data: product, error: fetchError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (fetchError) {
-        console.error('[Error fetching product]:', fetchError);
-        showAlert('Error', fetchError.message, 'error');
-        return;
-      }
-
-      // [Info]: Delete from database (CASCADE will handle product_categories)
-      const { error: deleteError } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id);
-
-      if (deleteError) {
-        console.error('[Error deleting product]:', deleteError);
-        showAlert('Error', deleteError.message, 'error');
-        return;
-      }
-
-
-      // [Info]: Update UI optimistically
-      setData(prevProducts => prevProducts.filter(p => p.id !== id));
-
-      showToast('Product deleted successfully', '', 'success');
-
-      // [Info]: Delete images from storage (non-blocking)
-      if (product.image_folder) {
-        deleteProductImages(product.image_folder);
-      }
-    } catch (err) {
-      console.error('[Delete error]:', err);
-      showToast(
-        'Something went wrong while deleting the product.',
-        '',
-        'error',
+  const confirmDelete = useCallback(
+    id => {
+      showConfirm(
+        'Delete product',
+        'Delete this product?',
+        () => handleDelete(id),
+        { confirmText: 'Delete', destructive: true },
       );
-    }
-  };
+    },
+    [showConfirm],
+  );
+
+  const handleDelete = useCallback(
+    async id => {
+      try {
+        const { data: product, error: fetchError } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (fetchError) {
+          console.error('[Error fetching product]:', fetchError);
+          showAlert('Error', fetchError.message, 'error');
+          return;
+        }
+
+        const { error: deleteError } = await supabase
+          .from('products')
+          .delete()
+          .eq('id', id);
+
+        if (deleteError) {
+          console.error('[Error deleting product]:', deleteError);
+          showAlert('Error', deleteError.message, 'error');
+          return;
+        }
+
+        setData(prevProducts => prevProducts.filter(p => p.id !== id));
+        showToast('Product deleted successfully', '', 'success');
+
+        if (product.image_folder) {
+          deleteProductImages(product.image_folder);
+        }
+      } catch (err) {
+        console.error('[Delete error]:', err);
+        showToast(
+          'Something went wrong while deleting the product.',
+          '',
+          'error',
+        );
+      }
+    },
+    [showAlert, showToast, setData],
+  );
 
   // [Info]: Separate function for storage cleanup (runs in background)
-  const deleteProductImages = async imageFolder => {
+  const deleteProductImages = useCallback(async imageFolder => {
     try {
-
-      // [Info]: List all files in the folder
       const { data: files, error: listError } = await supabase.storage
         .from('product-images')
         .list(imageFolder);
@@ -179,10 +176,8 @@ export default function ProductsScreen({ navigation, route }) {
         return;
       }
 
-      // [Info]: Build file paths
       const filePaths = files.map(file => `${imageFolder}/${file.name}`);
 
-      // [Info]: Delete all files in the folder
       const { error: removeError } = await supabase.storage
         .from('product-images')
         .remove(filePaths);
@@ -193,7 +188,7 @@ export default function ProductsScreen({ navigation, route }) {
     } catch (err) {
       console.error('[Storage cleanup error]:', err);
     }
-  };
+  }, []);
 
   return (
     <View style={styles.container}>

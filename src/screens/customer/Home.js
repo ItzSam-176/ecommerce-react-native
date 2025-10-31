@@ -367,9 +367,8 @@ export default function Home({ navigation, route }) {
   }, []);
 
   // ✅ ADD THIS:
-  const handleSearchTextChange = useCallback(text => {
+  const handleSearchTextChange = text => {
     setSearchText(text);
-
     if (text.trim()) {
       setIsTyping(true);
 
@@ -386,7 +385,7 @@ export default function Home({ navigation, route }) {
         clearTimeout(typingTimeoutRef.current);
       }
     }
-  }, []);
+  };
 
   const renderSearchResult = useCallback(
     ({ item }) => {

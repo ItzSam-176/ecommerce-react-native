@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -54,6 +54,21 @@ export default function CartScreen({ navigation }) {
       };
     }, [initialLoading, getCart]),
   );
+
+  const summaryData = useMemo(() => {
+    const subtotal = cartData.reduce(
+      (t, i) => t + i.products.price * i.quantity,
+      0,
+    );
+    const discount = subtotal * 0.3;
+    const total = subtotal - discount;
+
+    return {
+      subtotal: subtotal.toFixed(2),
+      discount: discount.toFixed(2),
+      total: total.toFixed(2),
+    };
+  }, [cartData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -189,20 +204,6 @@ export default function CartScreen({ navigation }) {
     );
   };
 
-  const calculateSubtotal = () =>
-    cartData.reduce((t, i) => t + i.products.price * i.quantity, 0);
-
-  const calculateDiscount = () => {
-    const subtotal = calculateSubtotal();
-    return subtotal * 0.3;
-  };
-
-  const calculateTotal = () => {
-    const subtotal = calculateSubtotal();
-    const discount = calculateDiscount();
-    return subtotal - discount;
-  };
-
   const handleCheckout = async () => {
     if (cartData.length === 0) {
       showAlert('Error', 'Your cart is empty', 'error');
@@ -225,7 +226,7 @@ export default function CartScreen({ navigation }) {
     // Confirm order
     showConfirm(
       'Confirm Order',
-      `Place order for ${formatCurrency(calculateTotal().toFixed(2))}?`,
+      `Place order for ${formatCurrency(summaryData.total)}?`,
       async () => {
         // Set placingOrder to true when user confirms
         setPlacingOrder(true);
@@ -455,7 +456,7 @@ export default function CartScreen({ navigation }) {
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal:</Text>
                 <Text style={styles.summaryValue}>
-                  {formatCurrency(calculateSubtotal().toFixed(2))}
+                  {formatCurrency(summaryData.subtotal)}
                 </Text>
               </View>
 
@@ -472,7 +473,7 @@ export default function CartScreen({ navigation }) {
               <View style={[styles.summaryRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total:</Text>
                 <Text style={styles.totalValue}>
-                  {formatCurrency(calculateTotal().toFixed(2))}
+                  {formatCurrency(summaryData.total)}
                 </Text>
               </View>
             </View>
