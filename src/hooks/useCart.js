@@ -44,18 +44,6 @@ export const useCart = (
     }
   }, [products, checkCartStatus]);
 
-  const debugCartItems = useCallback(() => {
-    console.log('=== CART DEBUG ===');
-    console.log('cartItems size:', cartItems.size);
-    console.log('cartItems contents:', Array.from(cartItems));
-    console.log('cartQuantities size:', cartQuantities.size);
-    console.log(
-      'cartQuantities contents:',
-      Array.from(cartQuantities.entries()),
-    );
-    console.log('==================');
-  }, [cartItems, cartQuantities]);
-
   const addToCart = useCallback(
     async (product, showAlertFlag = true, quantity = 1) => {
       if (!product?.id) {
@@ -461,7 +449,5 @@ export const useCart = (
     totalQuantity,
 
     isEmpty: cartItems.size === 0,
-
-    debugCartItems,
   };
 };

@@ -19,6 +19,7 @@ import CustomAlert from '../../components/informative/CustomAlert';
 import Input from '../../components/Form/Input';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
+import Loader from '../../components/shared/Loader';
 
 const UserDetailsScreen = ({ navigation, route }) => {
   const [userProfile, setUserProfile] = useState(
@@ -58,7 +59,7 @@ const UserDetailsScreen = ({ navigation, route }) => {
         phone: userProfile.phone ? String(userProfile.phone) : '',
         address: userProfile.address || '',
         city: userProfile.city || '',
-        zipCode: userProfile.zip_code || '',
+        zipCode: userProfile.zip_code ? String(userProfile.zip_code) : '',
         country: userProfile.country || '',
       });
     }
@@ -96,110 +97,95 @@ const UserDetailsScreen = ({ navigation, route }) => {
     }
   };
 
-const uploadImage = async asset => {
-  try {
-    setUploadingImage(true);
+  const uploadImage = async asset => {
+    try {
+      setUploadingImage(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
-    console.log('[DEBUG] Starting image upload for user:', user.id);
+      // DELETE OLD IMAGE FIRST
+      if (userProfile?.image_url) {
+        try {
+          // Extract filename from URL
+          // Example URL: https://xxx.supabase.co/storage/v1/object/public/product-images/avatars/user-id_123.jpg
+          const urlParts = userProfile.image_url.split('/');
+          const oldFileName = urlParts.slice(-2).join('/'); // Gets "avatars/user-id_123.jpg"
 
-    // DELETE OLD IMAGE FIRST
-    if (userProfile?.image_url) {
-      try {
-        // Extract filename from URL
-        // Example URL: https://xxx.supabase.co/storage/v1/object/public/product-images/avatars/user-id_123.jpg
-        const urlParts = userProfile.image_url.split('/');
-        const oldFileName = urlParts.slice(-2).join('/'); // Gets "avatars/user-id_123.jpg"
+          const { error: deleteError } = await supabase.storage
+            .from('product-images')
+            .remove([oldFileName]);
 
-        console.log('[DEBUG] Deleting old image:', oldFileName);
-
-        const { error: deleteError } = await supabase.storage
-          .from('product-images')
-          .remove([oldFileName]);
-
-        if (deleteError) {
-          console.log('[WARNING] Failed to delete old image:', deleteError);
-          // Don't throw error - continue with upload even if delete fails
-        } else {
-          console.log('[DEBUG] Old image deleted successfully');
+          if (deleteError) {
+            console.log('[WARNING] Failed to delete old image:', deleteError);
+            // Don't throw error - continue with upload even if delete fails
+          }
+        } catch (deleteErr) {
+          console.log('[WARNING] Error during delete:', deleteErr);
+          // Continue with upload
         }
-      } catch (deleteErr) {
-        console.log('[WARNING] Error during delete:', deleteErr);
-        // Continue with upload
       }
+
+      // Read file as base64
+      const base64 = await RNFS.readFile(asset.uri, 'base64');
+      const fileName = `avatars/${user.id}.jpg`; // Use consistent filename (just user ID, no timestamp)
+
+      // Convert base64 to ArrayBuffer
+      const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+      // Upload to Supabase Storage - use upsert to overwrite
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, arrayBuffer, {
+          contentType: 'image/jpeg',
+          upsert: true, // This overwrites if file exists
+        });
+
+      if (uploadError) {
+        console.log('[ERROR] Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(fileName);
+
+      if (!urlData?.publicUrl) {
+        throw new Error('Failed to get image URL');
+      }
+
+      // Add cache buster to force image refresh
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      // Update user profile with new image URL
+      const { data, error } = await supabase
+        .from('users')
+        .update({ image_url: publicUrl })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.log('[ERROR] Database update error:', error);
+        throw error;
+      }
+
+      setUserProfile(data);
+      setShowSuccessAlert(true);
+
+      if (route.params?.onUpdate) {
+        route.params.onUpdate();
+      }
+    } catch (error) {
+      console.log('[ERROR] Upload image:', error);
+      showError('Error', `Failed to upload image: ${error.message}`);
+    } finally {
+      setUploadingImage(false);
     }
-
-    // Read file as base64
-    const base64 = await RNFS.readFile(asset.uri, 'base64');
-    const fileName = `avatars/${user.id}.jpg`; // Use consistent filename (just user ID, no timestamp)
-
-    console.log('[DEBUG] Uploading file:', fileName);
-
-    // Convert base64 to ArrayBuffer
-    const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
-    // Upload to Supabase Storage - use upsert to overwrite
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(fileName, arrayBuffer, {
-        contentType: 'image/jpeg',
-        upsert: true, // This overwrites if file exists
-      });
-
-    if (uploadError) {
-      console.log('[ERROR] Upload error:', uploadError);
-      throw uploadError;
-    }
-
-    console.log('[DEBUG] Upload successful:', uploadData);
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(fileName);
-
-    if (!urlData?.publicUrl) {
-      throw new Error('Failed to get image URL');
-    }
-
-    // Add cache buster to force image refresh
-    const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
-    console.log('[DEBUG] Public URL:', publicUrl);
-
-    // Update user profile with new image URL
-    const { data, error } = await supabase
-      .from('users')
-      .update({ image_url: publicUrl })
-      .eq('id', user.id)
-      .select()
-      .single();
-
-    if (error) {
-      console.log('[ERROR] Database update error:', error);
-      throw error;
-    }
-
-    console.log('[DEBUG] Profile updated successfully');
-
-    setUserProfile(data);
-    setShowSuccessAlert(true);
-
-    if (route.params?.onUpdate) {
-      route.params.onUpdate();
-    }
-  } catch (error) {
-    console.log('[ERROR] Upload image:', error);
-    showError('Error', `Failed to upload image: ${error.message}`);
-  } finally {
-    setUploadingImage(false);
-  }
-};
-
+  };
 
   const handleSave = useCallback(async () => {
     if (!formData.name.trim()) {
@@ -229,7 +215,7 @@ const uploadImage = async asset => {
         phone: formData.phone ? parseInt(formData.phone) : null,
         address: formData.address.trim() || null,
         city: formData.city.trim() || null,
-        zip_code: formData.zipCode.trim() || null,
+        zip_code: formData.zipCode ? parseInt(formData.zipCode) : null,
         country: formData.country.trim() || null,
       };
 
@@ -250,7 +236,7 @@ const uploadImage = async asset => {
         phone: data.phone ? String(data.phone) : '',
         address: data.address || '',
         city: data.city || '',
-        zipCode: data.zip_code || '',
+        zipCode: data.zip_code ? String(data.zip_code) : '',
         country: data.country || '',
       });
 
@@ -278,7 +264,7 @@ const uploadImage = async asset => {
       phone: userProfile.phone ? String(userProfile.phone) : '',
       address: userProfile.address || '',
       city: userProfile.city || '',
-      zipCode: userProfile.zip_code || '',
+      zipCode: userProfile.zip_code ? String(userProfile.zip_code) : '',
       country: userProfile.country || '',
     });
     setIsEditing(false);
@@ -318,6 +304,7 @@ const uploadImage = async asset => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <Loader visible={uploadingImage || loading} size={120} speed={1} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -336,34 +323,24 @@ const uploadImage = async asset => {
               activeOpacity={0.8}
             >
               <View style={styles.avatarBorder}>
-                {uploadingImage ? (
-                  <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color="#4fc3f7" />
+                <>
+                  <Image
+                    source={
+                      userProfile?.image_url
+                        ? { uri: userProfile.image_url }
+                        : require('../../assets/default-avatar.png')
+                    }
+                    style={styles.avatar}
+                  />
+                  <View style={styles.editIconContainer}>
+                    <LinearGradient
+                      colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
+                      style={styles.editIcon}
+                    >
+                      <Ionicons name="create-outline" size={20} color="#fff" />
+                    </LinearGradient>
                   </View>
-                ) : (
-                  <>
-                    <Image
-                      source={
-                        userProfile?.image_url
-                          ? { uri: userProfile.image_url }
-                          : require('../../assets/default-avatar.png')
-                      }
-                      style={styles.avatar}
-                    />
-                    <View style={styles.editIconContainer}>
-                      <LinearGradient
-                        colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
-                        style={styles.editIcon}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={20}
-                          color="#fff"
-                        />
-                      </LinearGradient>
-                    </View>
-                  </>
-                )}
+                </>
               </View>
             </TouchableOpacity>
             <Text style={styles.changePhotoText}>Tap to change photo</Text>
@@ -545,14 +522,6 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     backgroundColor: '#2a3847',
-  },
-  loadingOverlay: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(42, 56, 71, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   editIconContainer: {
     position: 'absolute',

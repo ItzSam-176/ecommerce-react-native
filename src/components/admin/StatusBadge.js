@@ -51,7 +51,6 @@ const StatusBadge = ({
   };
 
   const triggerHapticFeedback = () => {
-    console.log('[Triggering haptic feedback]');
     HapticFeedback.trigger(HapticFeedbackTypes.impactMedium, {
       enableVibrateFallback: true,
       ignoreAndroidSystemSettings: false,
@@ -59,12 +58,10 @@ const StatusBadge = ({
   };
 
   const handleMenuOpen = () => {
-    console.log('[Menu opened]');
     triggerHapticFeedback();
   };
 
   const handleStatusSelect = selectedStatus => {
-    console.log('[Status selected]:', selectedStatus);
     triggerHapticFeedback();
 
     if (onStatusChange && selectedStatus) {

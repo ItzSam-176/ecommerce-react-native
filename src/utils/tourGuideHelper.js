@@ -18,7 +18,6 @@ export const hasCompletedTour = async tourKey => {
 export const setTourCompleted = async tourKey => {
   try {
     await AsyncStorage.setItem(tourKey, 'true');
-    console.log('[INFO] Tour marked as completed:', tourKey);
   } catch (error) {
     console.log('[ERROR] Saving tour status:', error);
   }
@@ -27,7 +26,6 @@ export const setTourCompleted = async tourKey => {
 export const resetTour = async tourKey => {
   try {
     await AsyncStorage.removeItem(tourKey);
-    console.log('[INFO] Tour reset:', tourKey);
   } catch (error) {
     console.log('[ERROR] Resetting tour:', error);
   }

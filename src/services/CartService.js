@@ -156,9 +156,7 @@ export class CartService {
         .delete()
         .eq('customer_id', user.id)
         .eq('product_id', productId);
-      console.log(
-        `(CartService) Removing product ${productId} for user ${user.id}`,
-      );
+
       if (error) throw error;
       return { success: true };
     } catch (error) {
@@ -169,18 +167,15 @@ export class CartService {
   // Add this method to your CartService class in cartService.js
 
   static async updateCartQuantity(productId, action = 'increment') {
-    console.log(`(CartService) ${action}ing quantity for product ${productId}`);
 
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      console.log('(CartService) User authenticated:', user?.id);
 
       if (!user) throw new Error('User not authenticated');
 
       // First, get the current quantity
-      console.log('(CartService) Fetching current quantity...');
       const { data: currentData, error: fetchError } = await supabase
         .from('cart')
         .select('quantity')
@@ -197,7 +192,6 @@ export class CartService {
       }
 
       if (!currentData) {
-        console.log('(CartService) Item not found in cart');
         return { success: false, error: 'Item not found in cart' };
       }
 
@@ -207,26 +201,18 @@ export class CartService {
       // Calculate new quantity based on action
       if (action === 'increment') {
         newQuantity = currentQuantity + 1;
-        console.log(
-          `(CartService) Incrementing: ${currentQuantity} → ${newQuantity}`,
-        );
       } else if (action === 'decrement') {
         newQuantity = Math.max(1, currentQuantity - 1); // Don't go below 1
-        console.log(
-          `(CartService) Decrementing: ${currentQuantity} → ${newQuantity}`,
-        );
       } else {
         throw new Error('Invalid action. Use "increment" or "decrement"');
       }
 
       // If decrementing would result in 0, remove the item instead
       if (action === 'decrement' && currentQuantity <= 1) {
-        console.log('(CartService) Quantity would be 0, removing item instead');
         return await this.removeFromCart(productId);
       }
 
       // Update the quantity
-      console.log(`(CartService) Updating quantity to ${newQuantity}`);
       const { data: updateData, error: updateError } = await supabase
         .from('cart')
         .update({ quantity: newQuantity })
@@ -239,7 +225,6 @@ export class CartService {
         throw updateError;
       }
 
-      console.log('(CartService) Successfully updated quantity:', updateData);
       return {
         success: true,
         data: updateData[0],

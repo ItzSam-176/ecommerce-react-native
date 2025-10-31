@@ -59,7 +59,6 @@ export default function ProductsScreen({ navigation, route }) {
   }, [searchText]);
 
   useEffect(() => {
-    console.log('[Reloading due to search/sort change]');
     reset();
     fetchPage(true);
     setSortVisible(false);
@@ -69,23 +68,18 @@ export default function ProductsScreen({ navigation, route }) {
   // Listen for navigation events
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      console.log('[Screen focused]');
 
       // Check if coming back from Add/Edit screen
       if (navigation.getState().routes.some(r => r.params?.productChanged)) {
-        console.log('[Product changed - refreshing]');
         reset();
         fetchPage(true);
 
         // Clear the flag
         navigation.setParams({ productChanged: false });
       } else if (!hasLoadedInitially.current) {
-        console.log('[Initial load]');
         reset();
         fetchPage(true);
         hasLoadedInitially.current = true;
-      } else {
-        console.log('[No refresh needed - data cached]');
       }
     });
 
@@ -105,7 +99,6 @@ export default function ProductsScreen({ navigation, route }) {
   }, [route.params?.showSort]);
 
   const onRefresh = async () => {
-    console.log('[Manual refresh triggered]');
     setRefreshing(true);
     reset();
     await fetchPage(true);
@@ -123,8 +116,6 @@ export default function ProductsScreen({ navigation, route }) {
 
   const handleDelete = async id => {
     try {
-      console.log('[Starting delete for product]:', id);
-
       // [Info]: Fetch product details first
       const { data: product, error: fetchError } = await supabase
         .from('products')
@@ -150,11 +141,9 @@ export default function ProductsScreen({ navigation, route }) {
         return;
       }
 
-      console.log('[Product deleted from database]');
 
       // [Info]: Update UI optimistically
       setData(prevProducts => prevProducts.filter(p => p.id !== id));
-      console.log('[UI updated - product removed from list]');
 
       showToast('Product deleted successfully', '', 'success');
 
@@ -175,7 +164,6 @@ export default function ProductsScreen({ navigation, route }) {
   // [Info]: Separate function for storage cleanup (runs in background)
   const deleteProductImages = async imageFolder => {
     try {
-      console.log('[Cleaning up storage folder]:', imageFolder);
 
       // [Info]: List all files in the folder
       const { data: files, error: listError } = await supabase.storage
@@ -188,13 +176,11 @@ export default function ProductsScreen({ navigation, route }) {
       }
 
       if (!files || files.length === 0) {
-        console.log('[No files to delete in folder]:', imageFolder);
         return;
       }
 
       // [Info]: Build file paths
       const filePaths = files.map(file => `${imageFolder}/${file.name}`);
-      console.log('[Files to delete]:', filePaths);
 
       // [Info]: Delete all files in the folder
       const { error: removeError } = await supabase.storage
@@ -203,12 +189,6 @@ export default function ProductsScreen({ navigation, route }) {
 
       if (removeError) {
         console.error('[Error deleting files]:', removeError.message);
-      } else {
-        console.log(
-          '[Storage files deleted successfully]:',
-          filePaths.length,
-          'files',
-        );
       }
     } catch (err) {
       console.error('[Storage cleanup error]:', err);
@@ -241,7 +221,6 @@ export default function ProductsScreen({ navigation, route }) {
         )}
         onEndReached={() => {
           if (hasMore && !loadingMore && totalFetched >= pageSize) {
-            console.log('[Loading more - totalFetched]:', totalFetched);
             fetchPage();
           }
         }}

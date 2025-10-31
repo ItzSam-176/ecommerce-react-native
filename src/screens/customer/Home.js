@@ -323,9 +323,6 @@ export default function Home({ navigation, route }) {
       p.name.toLowerCase().includes(query),
     );
 
-    console.log(
-      `[Search] Query: "${searchText}" | Results: ${filtered.length}`,
-    );
     return filtered;
   }, [searchText, mappedProducts]);
 

@@ -4,6 +4,9 @@
 /Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir
 /Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/rnasyncstorage_autolinked_build/CMakeFiles/edit_cache.dir
 /Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/rnasyncstorage_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/lottiereactnative_autolinked_build/CMakeFiles/react_codegen_lottiereactnative.dir
+/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/lottiereactnative_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/lottiereactnative_autolinked_build/CMakeFiles/rebuild_cache.dir
 /Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/rngesturehandler_codegen_autolinked_build/CMakeFiles/react_codegen_rngesturehandler_codegen.dir
 /Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/rngesturehandler_codegen_autolinked_build/CMakeFiles/edit_cache.dir
 /Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/x86_64/rngesturehandler_codegen_autolinked_build/CMakeFiles/rebuild_cache.dir

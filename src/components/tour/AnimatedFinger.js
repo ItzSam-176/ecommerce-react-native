@@ -18,7 +18,6 @@ const AnimatedFinger = ({ direction, visible }) => {
   const opacity = useSharedValue(0);
 
   useEffect(() => {
-    console.log('AnimatedFinger - visible:', visible, 'direction:', direction);
     if (!visible) {
       opacity.value = withTiming(0, { duration: 200 });
       translateX.value = 0;

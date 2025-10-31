@@ -45,6 +45,7 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/armeabi-v7a/rnasyncstorage_autolinked_build/cmake_install.cmake")
+  include("/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/armeabi-v7a/lottiereactnative_autolinked_build/cmake_install.cmake")
   include("/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/armeabi-v7a/rngesturehandler_codegen_autolinked_build/cmake_install.cmake")
   include("/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/armeabi-v7a/RNHapticFeedbackSpec_autolinked_build/cmake_install.cmake")
   include("/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/armeabi-v7a/RNImagePickerSpec_autolinked_build/cmake_install.cmake")

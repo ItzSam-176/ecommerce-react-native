@@ -31,6 +31,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import DraggableFlatList, {
   ScaleDecorator,
 } from 'react-native-draggable-flatlist';
+import Loader from '../../components/shared/Loader';
 
 export default function AddProductsScreen({ navigation, route }) {
   const { showToast } = useToastify();
@@ -48,6 +49,8 @@ export default function AddProductsScreen({ navigation, route }) {
   const [categories, setCategories] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+
+  const [isSaving, setIsSaving] = useState(false);
 
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [dropdownInFocus, setDropdownInFocus] = useState(false);
@@ -78,7 +81,6 @@ export default function AddProductsScreen({ navigation, route }) {
   const fetchProductImages = async () => {
     if (!product?.id) return;
 
-    console.log('[Fetching product images for]:', product.id);
 
     const { data, error } = await supabase
       .from('product_images')
@@ -100,12 +102,10 @@ export default function AddProductsScreen({ navigation, route }) {
         displayOrder: img.display_order || index,
       }));
       setImages(existingImages);
-      console.log('[Loaded existing images]:', existingImages.length);
     }
   };
 
   const fetchAllCategories = async () => {
-    console.log('[Fetching all categories]');
     const { data, error } = await supabase
       .from('category')
       .select('*')
@@ -113,14 +113,12 @@ export default function AddProductsScreen({ navigation, route }) {
 
     if (!error && data) {
       setCategories(data);
-      console.log(`[Loaded ${data.length} categories]`);
     } else {
       console.error('[Error fetching categories]:', error);
     }
   };
 
   const searchCategories = async query => {
-    console.log(`[Searching categories for: ${query}]`);
     setIsSearching(true);
 
     const { data, error } = await supabase
@@ -130,7 +128,6 @@ export default function AddProductsScreen({ navigation, route }) {
       .order('name', { ascending: true });
 
     if (!error && data) {
-      console.log(`[Found ${data.length} matching categories]`);
 
       const hasExactMatch = data.some(
         cat => cat.name.toLowerCase() === query.toLowerCase(),
@@ -156,7 +153,6 @@ export default function AddProductsScreen({ navigation, route }) {
   };
 
   const fetchProductCategories = async () => {
-    console.log('[Fetching product categories for product]:', product.id);
 
     const { data, error } = await supabase
       .from('product_categories')
@@ -171,7 +167,6 @@ export default function AddProductsScreen({ navigation, route }) {
       )
       .eq('product_id', product.id);
 
-    console.log('[Raw product categories data]:', data);
 
     if (!error && data?.length) {
       const mappedCategories = data
@@ -186,7 +181,6 @@ export default function AddProductsScreen({ navigation, route }) {
         })
         .filter(cat => cat.id);
 
-      console.log('[Mapped categories]:', mappedCategories);
       setSelectedCategories(mappedCategories);
     } else if (error) {
       console.error('[Error fetching product categories]:', error);
@@ -199,11 +193,7 @@ export default function AddProductsScreen({ navigation, route }) {
 
     // Check if already at max
     if (currentCount >= MAX_IMAGES) {
-      showToast(
-        `Maximum ${MAX_IMAGES} images allowed`,
-        '',
-        'warning',
-      );
+      showToast(`Maximum ${MAX_IMAGES} images allowed`, '', 'warning');
       return;
     }
 
@@ -218,10 +208,8 @@ export default function AddProductsScreen({ navigation, route }) {
         selectionLimit: remainingSlots, // ✅ Dynamic limit
       });
 
-      console.log('[Image picker result]:', result);
 
       if (result.didCancel) {
-        console.log('[User cancelled image picker]');
         return;
       }
 
@@ -236,7 +224,6 @@ export default function AddProductsScreen({ navigation, route }) {
         !Array.isArray(result.assets) ||
         result.assets.length === 0
       ) {
-        console.log('[No assets selected]');
         return;
       }
 
@@ -253,7 +240,6 @@ export default function AddProductsScreen({ navigation, route }) {
         displayOrder: images.length + index,
       }));
 
-      console.log('[New images to add]:', newImages.length);
 
       setImages(prev => [...(prev || []), ...newImages]);
 
@@ -275,7 +261,6 @@ export default function AddProductsScreen({ navigation, route }) {
         displayOrder: newIndex,
       }));
     setImages(updatedImages);
-    console.log('[Image removed - reordered remaining]');
   };
 
   const handleReorderImages = ({ data }) => {
@@ -284,10 +269,6 @@ export default function AddProductsScreen({ navigation, route }) {
       displayOrder: index,
     }));
     setImages(reorderedImages);
-    console.log(
-      '[Images reordered]:',
-      reorderedImages.map(i => i.displayOrder),
-    );
   };
 
   const uploadImage = async (image, folderName, displayOrder) => {
@@ -333,7 +314,6 @@ export default function AddProductsScreen({ navigation, route }) {
         .from('product-images')
         .getPublicUrl(storagePath);
 
-      console.log('[Public URL generated]:', publicData.publicUrl);
 
       return { storagePath, publicUrl: publicData.publicUrl };
     } catch (err) {
@@ -344,7 +324,6 @@ export default function AddProductsScreen({ navigation, route }) {
 
   const deleteImageFromStorage = async storagePath => {
     try {
-      console.log('[Deleting image from storage]:', storagePath);
       const { error } = await supabase.storage
         .from('product-images')
         .remove([storagePath]);
@@ -352,7 +331,6 @@ export default function AddProductsScreen({ navigation, route }) {
       if (error) {
         console.error('[Storage deletion error]:', error);
       } else {
-        console.log('[Image deleted successfully]');
       }
     } catch (err) {
       console.error('[Delete image error]:', err);
@@ -386,6 +364,13 @@ export default function AddProductsScreen({ navigation, route }) {
     if (!validateForm()) return;
     if (!adminId) return showToast('Admin not loaded yet', '', 'error');
 
+    // Prevent double submission
+    if (isSaving) {
+      return;
+    }
+
+    setIsSaving(true);
+
     let productId;
     let folderName;
 
@@ -400,7 +385,6 @@ export default function AddProductsScreen({ navigation, route }) {
           strict: true,
         })}_${productId}`;
 
-        console.log('[Cleaning up product images]');
 
         const { data: bucketFiles, error: listError } = await supabase.storage
           .from('product-images')
@@ -408,35 +392,26 @@ export default function AddProductsScreen({ navigation, route }) {
 
         if (listError) {
           console.error('[Error listing bucket files]:', listError);
-        } else {
-          console.log('[Files in bucket folder]:', bucketFiles?.length || 0);
-        }
+        } 
 
         const { data: existingImages } = await supabase
           .from('product_images')
           .select('*')
           .eq('product_id', productId);
 
-        console.log('[Existing images in DB]:', existingImages?.length || 0);
 
         const currentImageIds = images
           .filter(img => !img.isLocal && img.id)
           .map(img => img.id);
 
-        console.log('[Currently selected image IDs]:', currentImageIds);
 
         const imagesToDeleteFromDB = existingImages?.filter(
           img => !currentImageIds.includes(img.id),
         );
 
-        console.log(
-          '[Images to delete from DB]:',
-          imagesToDeleteFromDB?.length || 0,
-        );
 
         if (imagesToDeleteFromDB && imagesToDeleteFromDB.length > 0) {
           for (const img of imagesToDeleteFromDB) {
-            console.log('[Deleting from DB]:', img.storage_path);
             await supabase.from('product_images').delete().eq('id', img.id);
           }
         }
@@ -445,14 +420,11 @@ export default function AddProductsScreen({ navigation, route }) {
           .filter(img => !img.isLocal && img.storagePath)
           .map(img => img.storagePath);
 
-        console.log('[Images to keep]:', imagesToKeep);
 
         if (bucketFiles && bucketFiles.length > 0) {
           const filesToDelete = bucketFiles
             .map(file => `${folderName}/${file.name}`)
             .filter(filePath => !imagesToKeep.includes(filePath));
-
-          console.log('[Files to delete from bucket]:', filesToDelete);
 
           if (filesToDelete.length > 0) {
             const { error: deleteError } = await supabase.storage
@@ -461,15 +433,12 @@ export default function AddProductsScreen({ navigation, route }) {
 
             if (deleteError) {
               console.error('[Bucket deletion error]:', deleteError);
-            } else {
-              console.log('[Deleted files from bucket]:', filesToDelete.length);
             }
           }
         }
 
         // Upload new local images with proper display_order
         const localImages = images.filter(img => img.isLocal);
-        console.log('[Uploading new images]:', localImages.length);
 
         for (let i = 0; i < localImages.length; i++) {
           const img = localImages[i];
@@ -547,7 +516,6 @@ export default function AddProductsScreen({ navigation, route }) {
           strict: true,
         })}_${productId}`;
 
-        console.log('[Uploading images]:', images.length);
 
         for (let i = 0; i < images.length; i++) {
           const img = images[i];
@@ -578,9 +546,11 @@ export default function AddProductsScreen({ navigation, route }) {
       }
 
       showToast(product ? 'Product updated!' : 'Product added!', '', 'success');
+      setIsSaving(false);
       navigation.navigate('ProductsScreen', { productChanged: true });
     } catch (error) {
       console.error('[Save product error]:', error);
+      setIsSaving(false);
       showToast('Something went wrong', '', 'error');
     }
   };
@@ -590,8 +560,6 @@ export default function AddProductsScreen({ navigation, route }) {
       showToast('Admin not loaded yet', '', 'error');
       return null;
     }
-
-    console.log('[Creating new category]:', categoryName);
 
     const { data, error } = await supabase
       .from('category')
@@ -605,7 +573,6 @@ export default function AddProductsScreen({ navigation, route }) {
       return null;
     }
 
-    console.log('[Category created successfully]:', data);
     showToast(`Added: ${data.name}`, '', 'success');
     await fetchAllCategories();
     return data;
@@ -641,7 +608,6 @@ export default function AddProductsScreen({ navigation, route }) {
   };
 
   const handleDropdownFocus = () => {
-    console.log('[Dropdown opened - resetting search]');
     setSearchQuery('');
     setIsSearching(false);
     fetchAllCategories();
@@ -649,7 +615,6 @@ export default function AddProductsScreen({ navigation, route }) {
   };
 
   const handleDropdownBlur = () => {
-    console.log('[Dropdown closed - resetting search]');
     setSearchQuery('');
     setIsSearching(false);
     fetchAllCategories();
@@ -657,7 +622,6 @@ export default function AddProductsScreen({ navigation, route }) {
   };
 
   const handleClearSearch = () => {
-    console.log('[Search cleared manually]');
     setSearchQuery('');
     setIsSearching(false);
     fetchAllCategories();
@@ -743,7 +707,6 @@ export default function AddProductsScreen({ navigation, route }) {
           <TouchableOpacity
             style={styles.removeImageButton}
             onPress={() => {
-              console.log('[Removing image at index]:', index);
               removeImage(index);
             }}
             activeOpacity={0.8}
@@ -766,175 +729,178 @@ export default function AddProductsScreen({ navigation, route }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Input placeholder="Name" value={name} onChangeText={setName} />
-      <Input
-        placeholder="Price"
-        value={price}
-        onChangeText={setPrice}
-        keyboardType="numeric"
-      />
-      <Input
-        placeholder="Quantity"
-        value={quantity}
-        onChangeText={setQuantity}
-        keyboardType="numeric"
-      />
-      <Input
-        placeholder="Description"
-        value={description}
-        onChangeText={setDescription}
-      />
+    <>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Input placeholder="Name" value={name} onChangeText={setName} />
+        <Input
+          placeholder="Price"
+          value={price}
+          onChangeText={setPrice}
+          keyboardType="numeric"
+        />
+        <Input
+          placeholder="Quantity"
+          value={quantity}
+          onChangeText={setQuantity}
+          keyboardType="numeric"
+        />
+        <Input
+          placeholder="Description"
+          value={description}
+          onChangeText={setDescription}
+        />
 
-      <MultiSelect
-        style={styles.dropdown}
-        containerStyle={styles.dropdownContainer}
-        placeholderStyle={styles.placeholderStyle}
-        selectedTextStyle={styles.selectedTextStyle}
-        data={categories}
-        search
-        maxHeight={250}
-        labelField="name"
-        valueField="id"
-        placeholder="Search or add category..."
-        value={selectedCategories.map(c => c.id)}
-        onChange={handleCategoryChange}
-        onFocus={handleDropdownFocus}
-        onBlur={handleDropdownBlur}
-        showsVerticalScrollIndicator={false}
-        visibleSelectedItem={false}
-        activeColor="rgba(79, 195, 247, 0.3)"
-        renderInputSearch={onSearch => (
-          <View>
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={text => {
-                  setSearchQuery(text);
-                  onSearch(text);
-                }}
-                placeholder="Type to search..."
-                placeholderTextColor="#8a9fb5"
-                autoCorrect={false}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => {
-                    handleClearSearch();
-                    onSearch('');
+        <MultiSelect
+          style={styles.dropdown}
+          containerStyle={styles.dropdownContainer}
+          placeholderStyle={styles.placeholderStyle}
+          selectedTextStyle={styles.selectedTextStyle}
+          data={categories}
+          search
+          maxHeight={250}
+          labelField="name"
+          valueField="id"
+          placeholder="Search or add category..."
+          value={selectedCategories.map(c => c.id)}
+          onChange={handleCategoryChange}
+          onFocus={handleDropdownFocus}
+          onBlur={handleDropdownBlur}
+          showsVerticalScrollIndicator={false}
+          visibleSelectedItem={false}
+          activeColor="rgba(79, 195, 247, 0.3)"
+          renderInputSearch={onSearch => (
+            <View>
+              <View style={styles.searchContainer}>
+                <TextInput
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={text => {
+                    setSearchQuery(text);
+                    onSearch(text);
                   }}
-                  style={styles.clearButton}
-                >
-                  <Text style={styles.clearButtonText}>✕</Text>
-                </TouchableOpacity>
+                  placeholder="Type to search..."
+                  placeholderTextColor="#8a9fb5"
+                  autoCorrect={false}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      handleClearSearch();
+                      onSearch('');
+                    }}
+                    style={styles.clearButton}
+                  >
+                    <Text style={styles.clearButtonText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {selectedCategories.length > 0 && (
+                <View style={styles.insideChipsContainer}>
+                  {selectedCategories.map(cat => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={styles.insideChip}
+                      onPress={() => handleRemoveCategory(cat)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.insideChipText}>{cat.name}</Text>
+                      <Ionicons name="close" size={14} color="#666" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
               )}
             </View>
+          )}
+          renderItem={item => (
+            <View style={[styles.item, item.isCreateNew && styles.createItem]}>
+              <Text
+                style={[styles.itemText, item.isCreateNew && styles.createText]}
+              >
+                {item.name}
+              </Text>
+            </View>
+          )}
+        />
 
-            {selectedCategories.length > 0 && (
-              <View style={styles.insideChipsContainer}>
-                {selectedCategories.map(cat => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={styles.insideChip}
-                    onPress={() => handleRemoveCategory(cat)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.insideChipText}>{cat.name}</Text>
-                    <Ionicons name="close" size={14} color="#666" />
-                  </TouchableOpacity>
-                ))}
-              </View>
+        <CategoryChips
+          categories={selectedCategories}
+          onRemove={handleRemoveCategory}
+          variant="form"
+          containerStyle={{ marginTop: 0, marginBottom: 0 }}
+          fullChipClickable={true}
+        />
+
+        <FilePicker
+          fileName={
+            images.length > 0 ? `${images.length}/5 image(s) selected` : null
+          }
+          onPick={pickImages}
+          placeholder={
+            images.length >= 5
+              ? 'Maximum 5 images selected'
+              : 'Upload product images (max 5)'
+          }
+          disabled={images.length >= 5} // ✅ Disable when at max
+        />
+
+        {/* Multiple Images Preview with Drag-to-Reorder */}
+        {images.length > 0 && (
+          <View style={styles.imagesPreviewContainer}>
+            <View style={styles.imagesSectionHeader}>
+              <Text style={styles.imagesSectionTitle}>
+                Product Images ({images.length})
+              </Text>
+
+              {/* Mode Toggle Button */}
+              <TouchableOpacity
+                onPress={() => setIsReorderMode(!isReorderMode)}
+                style={styles.reorderToggle}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={isReorderMode ? 'checkmark-circle' : 'swap-horizontal'}
+                  size={16}
+                  color="#4fc3f7"
+                />
+                <Text style={styles.reorderToggleText}>
+                  {isReorderMode ? 'Done Reordering' : 'Reorder'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {isReorderMode ? (
+              // Reorder Mode - DraggableFlatList
+              <DraggableFlatList
+                data={images}
+                renderItem={renderReorderItem}
+                keyExtractor={(item, index) => `${item.uri}-${index}`}
+                onDragEnd={handleReorderImages}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imagesList}
+              />
+            ) : (
+              // Normal Mode - Regular FlatList with X button
+              <FlatList
+                data={images}
+                renderItem={renderNormalItem}
+                keyExtractor={(item, index) => `${item.uri}-${index}`}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imagesList}
+              />
             )}
           </View>
         )}
-        renderItem={item => (
-          <View style={[styles.item, item.isCreateNew && styles.createItem]}>
-            <Text
-              style={[styles.itemText, item.isCreateNew && styles.createText]}
-            >
-              {item.name}
-            </Text>
-          </View>
-        )}
-      />
 
-      <CategoryChips
-        categories={selectedCategories}
-        onRemove={handleRemoveCategory}
-        variant="form"
-        containerStyle={{ marginTop: 0, marginBottom: 0 }}
-        fullChipClickable={true}
-      />
-
-      <FilePicker
-        fileName={
-          images.length > 0 ? `${images.length}/5 image(s) selected` : null
-        }
-        onPick={pickImages}
-        placeholder={
-          images.length >= 5
-            ? 'Maximum 5 images selected'
-            : 'Upload product images (max 5)'
-        }
-        disabled={images.length >= 5} // ✅ Disable when at max
-      />
-
-      {/* Multiple Images Preview with Drag-to-Reorder */}
-      {images.length > 0 && (
-        <View style={styles.imagesPreviewContainer}>
-          <View style={styles.imagesSectionHeader}>
-            <Text style={styles.imagesSectionTitle}>
-              Product Images ({images.length})
-            </Text>
-
-            {/* Mode Toggle Button */}
-            <TouchableOpacity
-              onPress={() => setIsReorderMode(!isReorderMode)}
-              style={styles.reorderToggle}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isReorderMode ? 'checkmark-circle' : 'swap-horizontal'}
-                size={16}
-                color="#4fc3f7"
-              />
-              <Text style={styles.reorderToggleText}>
-                {isReorderMode ? 'Done Reordering' : 'Reorder'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {isReorderMode ? (
-            // Reorder Mode - DraggableFlatList
-            <DraggableFlatList
-              data={images}
-              renderItem={renderReorderItem}
-              keyExtractor={(item, index) => `${item.uri}-${index}`}
-              onDragEnd={handleReorderImages}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.imagesList}
-            />
-          ) : (
-            // Normal Mode - Regular FlatList with X button
-            <FlatList
-              data={images}
-              renderItem={renderNormalItem}
-              keyExtractor={(item, index) => `${item.uri}-${index}`}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.imagesList}
-            />
-          )}
-        </View>
-      )}
-
-      <CustomButton
-        title={product ? 'Update Product' : 'Add Product'}
-        onPress={saveProduct}
-      />
-    </ScrollView>
+        <CustomButton
+          title={product ? 'Update Product' : 'Add Product'}
+          onPress={saveProduct}
+        />
+      </ScrollView>
+      <Loader visible={isSaving} size={120} speed={1} />
+    </>
   );
 }
 

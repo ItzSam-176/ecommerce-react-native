@@ -22,6 +22,7 @@ import { useToastify } from '../../hooks/useToastify';
 import formatCurrency from '../../utils/formatCurrency';
 import ShimmerProductsCard from '../../components/shimmer/ShimmerProductsCard';
 import { getProductPrimaryImage } from '../../utils/productImageHelper';
+import Loader from '../../components/shared/Loader';
 
 export default function CartScreen({ navigation }) {
   const { showAlert, showConfirm } = useAlert();
@@ -407,15 +408,6 @@ export default function CartScreen({ navigation }) {
       >
         <StatusBar barStyle="light-content" backgroundColor="#353F54" />
 
-        {placingOrder && (
-          <View style={styles.orderingOverlay}>
-            <View style={styles.orderingBox}>
-              <ActivityIndicator size="large" color="#4fc3f7" />
-              <Text style={styles.orderingText}>Placing your order...</Text>
-            </View>
-          </View>
-        )}
-
         <FlatList
           data={cartData}
           renderItem={renderCartItem}
@@ -493,6 +485,7 @@ export default function CartScreen({ navigation }) {
           </View>
         )}
       </ImageBackground>
+      <Loader visible={placingOrder} size={120} speed={1} />
     </View>
   );
 }

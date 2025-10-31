@@ -56,8 +56,6 @@ export default function ProductDetailsScreen({ navigation, route }) {
       setLoading(true);
       setError(null);
 
-      console.log('[Fetching product details]:', productId);
-
       // Fetch product
       const { data: productData, error: productError } = await supabase
         .from('products')
@@ -99,7 +97,6 @@ export default function ProductDetailsScreen({ navigation, route }) {
         ]);
       }
 
-      console.log('[Product loaded]:', productData.name);
     } catch (err) {
       console.error('[Error fetching product]:', err);
       setError(err.message || 'Failed to load product');

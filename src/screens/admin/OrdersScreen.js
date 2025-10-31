@@ -164,12 +164,6 @@ export default function OrdersScreen({ navigation, route }) {
     const wasColumnAdded = currentColumnCount > previousColumnCount.current;
     const wasColumnRemoved = currentColumnCount < previousColumnCount.current;
 
-    console.log('[Column selection changed]:', {
-      previous: previousColumnCount.current,
-      current: currentColumnCount,
-      added: wasColumnAdded,
-      removed: wasColumnRemoved,
-    });
 
     LayoutAnimation.configureNext(
       LayoutAnimation.create(
@@ -182,14 +176,12 @@ export default function OrdersScreen({ navigation, route }) {
     if (wasColumnAdded) {
       setTimeout(() => {
         if (horizontalScrollRef.current) {
-          console.log('[Scrolling to end - column added]');
           horizontalScrollRef.current.scrollToEnd({ animated: true });
         }
       }, 100);
     } else if (wasColumnRemoved) {
       setTimeout(() => {
         if (horizontalScrollRef.current) {
-          console.log('[Adjusting scroll - column removed]');
           horizontalScrollRef.current.scrollToEnd({ animated: false });
         }
       }, 50);
@@ -199,7 +191,6 @@ export default function OrdersScreen({ navigation, route }) {
   }, [visibleColumns]);
 
   const handleStatusChange = async (orderId, newStatus) => {
-    console.log('[Updating order status]:', { orderId, newStatus });
 
     try {
       const { error } = await supabase
@@ -219,7 +210,6 @@ export default function OrdersScreen({ navigation, route }) {
         ),
       );
 
-      console.log('[Status updated successfully]');
     } catch (err) {
       console.error('[Exception updating status]:', err);
       Alert.alert('Error', 'An error occurred while updating status');
@@ -276,21 +266,13 @@ export default function OrdersScreen({ navigation, route }) {
   const calculateColumnWidths = useCallback(columnCount => {
     const maxColumnsWithoutScroll = Math.floor(SCREEN_WIDTH / MIN_COLUMN_WIDTH);
 
-    console.log(
-      `[Screen width: ${SCREEN_WIDTH}px, Max columns without scroll: ${maxColumnsWithoutScroll}]`,
-    );
-
     if (columnCount <= maxColumnsWithoutScroll) {
       const columnWidth = Math.floor(SCREEN_WIDTH / columnCount);
-      console.log(
-        `[${columnCount} columns fit - using ${columnWidth}px each (full width)]`,
-      );
       return {
         widths: Array(columnCount).fill(columnWidth),
         needsScroll: false,
       };
     } else {
-      console.log(`[${columnCount} columns need scroll - using 140px each]`);
       return {
         widths: Array(columnCount).fill(140),
         needsScroll: true,
@@ -393,9 +375,7 @@ export default function OrdersScreen({ navigation, route }) {
   };
 
   const handleApplyColumns = newSelection => {
-    console.log('[Applying column selection]:', newSelection);
     if (newSelection.length === 0) {
-      console.log('[Empty selection - showing all columns]');
       setVisibleColumns(allColumns.map(c => c.key));
     } else {
       setVisibleColumns(newSelection);
@@ -403,7 +383,6 @@ export default function OrdersScreen({ navigation, route }) {
   };
 
   const handleResetColumns = () => {
-    console.log('[Resetting columns to show all]');
     setVisibleColumns(allColumns.map(c => c.key));
   };
 

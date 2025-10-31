@@ -34,7 +34,6 @@ const SearchableDropdown = ({
   }, [debouncedSearch]);
 
   const fetchAllCategories = async () => {
-    console.log('[Fetching all categories]');
     setLoading(true);
 
     const { data, error } = await supabase
@@ -44,7 +43,6 @@ const SearchableDropdown = ({
 
     if (!error && data) {
       setOptions(data);
-      console.log(`[Loaded ${data.length} categories]`);
     } else {
       console.error('[Error fetching categories]', error);
     }
@@ -53,7 +51,6 @@ const SearchableDropdown = ({
   };
 
   const searchCategories = async query => {
-    console.log(`[Searching categories for: ${query}]`);
     setLoading(true);
 
     const { data, error } = await supabase
@@ -64,7 +61,6 @@ const SearchableDropdown = ({
 
     if (!error && data) {
       setOptions(data);
-      console.log(`[Found ${data.length} matching categories]`);
     } else {
       console.error('[Search error]', error);
     }
@@ -83,7 +79,6 @@ const SearchableDropdown = ({
   };
 
   const handleCreate = async name => {
-    console.log(`[Creating new category: ${name}]`);
     if (onCreate) {
       const success = await onCreate(name);
       if (success) {

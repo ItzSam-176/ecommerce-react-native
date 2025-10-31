@@ -46,7 +46,6 @@ const SettingsScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (!hasLoadedInitially.current) {
-      console.log('[SETTINGS] Initial load');
       fetchUserProfile();
       loadViewMode();
       hasLoadedInitially.current = true;
@@ -59,7 +58,6 @@ const SettingsScreen = ({ navigation }) => {
       const currentRoute = state.routes[state.index];
 
       if (currentRoute.params?.shouldRefresh) {
-        console.log('[SETTINGS] Refresh triggered by navigation param');
         fetchUserProfile();
         navigation.setParams({ shouldRefresh: false });
       }
@@ -93,7 +91,6 @@ const SettingsScreen = ({ navigation }) => {
           .eq('id', user.id)
           .single();
         if (error) throw error;
-        console.log('[SETTINGS] Profile fetched:', data?.name);
         setUserProfile(data);
       }
     } catch (err) {

@@ -42,7 +42,6 @@ export default function WishlistScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       if (!hasLoadedOnce.current) {
-        console.log('[WishlistScreen] Initial load');
         (async () => {
           const res = await getWishlist();
           if (!res.success) {
@@ -51,8 +50,6 @@ export default function WishlistScreen({ navigation }) {
           setInitialLoading(false);
           hasLoadedOnce.current = true;
         })();
-      } else {
-        console.log('[WishlistScreen] Already loaded, skipping');
       }
     }, []), // EMPTY DEPENDENCY ARRAY - don't include getWishlist
   );
