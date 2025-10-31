@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, FlatList, StyleSheet, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../supabase/supabase';
