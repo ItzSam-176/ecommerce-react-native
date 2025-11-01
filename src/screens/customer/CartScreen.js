@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -8,9 +8,9 @@ import {
   TouchableOpacity,
   StatusBar,
   ImageBackground,
-  TextInput,
+  ScrollView,
   Image,
-  ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -23,11 +23,14 @@ import formatCurrency from '../../utils/formatCurrency';
 import ShimmerProductsCard from '../../components/shimmer/ShimmerProductsCard';
 import { getProductPrimaryImage } from '../../utils/productImageHelper';
 import Loader from '../../components/shared/Loader';
+import { Dropdown } from 'react-native-element-dropdown';
+import { useCoupon } from '../../hooks/useCoupon';
 
 export default function CartScreen({ navigation }) {
   const { showAlert, showConfirm } = useAlert();
   const { showToast } = useToastify();
 
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingItems, setLoadingItems] = useState(new Set());
@@ -36,6 +39,19 @@ export default function CartScreen({ navigation }) {
 
   const { cartData, setCartData, removeFromCart, updateCartQuantity, getCart } =
     useCart([], null, navigation);
+
+  // ✅ Use coupon hook
+  const {
+    applicableCoupons,
+    selectedCoupon,
+    couponDiscount,
+    loading: couponLoading,
+    fetchAllCoupons,
+    filterApplicableCoupons,
+    selectCoupon,
+    removeCoupon,
+    calculateTotal,
+  } = useCoupon();
 
   useFocusEffect(
     useCallback(() => {
@@ -55,20 +71,45 @@ export default function CartScreen({ navigation }) {
     }, [initialLoading, getCart]),
   );
 
+  // ✅ Fetch coupons on mount
+  useEffect(() => {
+    fetchAllCoupons();
+  }, [fetchAllCoupons]);
+
+  // ✅ Filter applicable when cart changes
+  useEffect(() => {
+    filterApplicableCoupons(cartData);
+  }, [cartData, filterApplicableCoupons]);
+
+  useEffect(() => {
+    const keyboardDidShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true),
+    );
+    const keyboardDidHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false),
+    );
+
+    return () => {
+      keyboardDidShow.remove();
+      keyboardDidHide.remove();
+    };
+  }, []);
+
   const summaryData = useMemo(() => {
     const subtotal = cartData.reduce(
       (t, i) => t + i.products.price * i.quantity,
       0,
     );
-    const discount = subtotal * 0.3;
-    const total = subtotal - discount;
+    const total = calculateTotal(subtotal);
 
     return {
       subtotal: subtotal.toFixed(2),
-      discount: discount.toFixed(2),
+      discount: couponDiscount.toFixed(2),
       total: total.toFixed(2),
     };
-  }, [cartData]);
+  }, [cartData, couponDiscount, calculateTotal]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -210,7 +251,6 @@ export default function CartScreen({ navigation }) {
       return;
     }
 
-    // Validate stock first
     setPlacingOrder(true);
     const stockValidation = await OrderService.validateStock(cartData);
 
@@ -220,51 +260,32 @@ export default function CartScreen({ navigation }) {
       return;
     }
 
-    // Reset placingOrder before showing confirm dialog
     setPlacingOrder(false);
 
-    // Confirm order
     showConfirm(
       'Confirm Order',
       `Place order for ${formatCurrency(summaryData.total)}?`,
       async () => {
-        // Set placingOrder to true when user confirms
         setPlacingOrder(true);
-
         try {
-          const result = await OrderService.createOrder(cartData);
+          const result = await OrderService.createOrder(cartData, {
+            coupon: selectedCoupon?.coupon,
+            discount: couponDiscount,
+          });
 
           if (result.success) {
-            // Clear cart data FIRST
             setCartData([]);
-
-            // Refresh cart from server in background
             getCart();
-
-            // Then hide loading
+            removeCoupon(); // ✅ Clear coupon after order
             setPlacingOrder(false);
-
-            // Show success toast
             showToast('Order placed successfully!', '', 'success');
           } else {
             setPlacingOrder(false);
-            if (
-              result.error === 'out_of_stock' ||
-              result.error === 'insufficient_stock'
-            ) {
-              showAlert('Stock Issue', result.message, 'error', [
-                {
-                  text: 'Refresh Cart',
-                  onPress: () => getCart(),
-                },
-              ]);
-            } else {
-              showAlert(
-                'Error',
-                result.error || 'Failed to place order',
-                'error',
-              );
-            }
+            showAlert(
+              'Error',
+              result.error || 'Failed to place order',
+              'error',
+            );
           }
         } catch (error) {
           setPlacingOrder(false);
@@ -416,74 +437,204 @@ export default function CartScreen({ navigation }) {
           contentContainerStyle={[
             styles.listContainer,
             cartData.length === 0 && styles.emptyListContainer,
-            cartData.length > 0 && { paddingBottom: 450 },
+            cartData.length > 0 && { paddingBottom: 550 },
           ]}
           ListEmptyComponent={renderEmptyCart}
           refreshing={refreshing}
           onRefresh={onRefresh}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled" // ✅ ADD THIS
+          scrollEnabled={!keyboardVisible} //
         />
 
         {cartData.length > 0 && (
-          <View style={styles.bottomSection}>
-            <View style={styles.promoSection}>
-              <TextInput
-                style={styles.promoInput}
-                placeholder="Enter promo code"
-                placeholderTextColor="#999"
-                value={promoCode}
-                onChangeText={setPromoCode}
-              />
-              <TouchableOpacity style={styles.applyButtonWrapper}>
-                <LinearGradient
-                  colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
-                  style={styles.applyButton}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.applyButtonText}>Apply</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+          <ScrollView
+            style={styles.bottomSection}
+            scrollEnabled={false} // ✅ Prevent scrolling, just layout
+            nestedScrollEnabled={true} // ✅ Allow nested scrolls
+          >
+            {/* ✅ UPDATED COUPON SECTION */}
+            <View style={styles.couponSection}>
+              <View style={styles.couponHeader}>
+                <Text style={styles.couponLabel}>Apply Coupon</Text>
+                {/* ✅ Show savings badge */}
+                {applicableCoupons.length > 0 && (
+                  <View style={styles.savingsBadge}>
+                    <Ionicons name="pricetag" size={12} color="#4fc3f7" />
+                    <Text style={styles.savingsText}>
+                      Save up to ₹{applicableCoupons[0]?.coupon.discount_amount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {applicableCoupons.length > 0 ? (
+                <View>
+                  <Dropdown
+                    style={styles.couponDropdown}
+                    placeholderStyle={styles.couponPlaceholder}
+                    selectedTextStyle={styles.couponSelectedText}
+                    containerStyle={styles.couponDropdownContainer}
+                    data={applicableCoupons}
+                    inputSearchStyle={styles.couponInputSearch}
+                    search={true}
+                    maxHeight={250} // ✅ REDUCED HEIGHT
+                    labelField="label"
+                    valueField="value"
+                    placeholder="Select coupon..."
+                    value={selectedCoupon?.value}
+                    onChange={selectCoupon}
+                    activeColor="rgba(79, 195, 247, 0.3)"
+                    renderItem={item => (
+                      <View style={styles.couponItem}>
+                        <View style={styles.couponItemContent}>
+                          <Text style={styles.couponItemCode}>
+                            {item.coupon.code}
+                          </Text>
+                          <Text style={styles.couponItemDetails}>
+                            {item.coupon.category.name}
+                          </Text>
+                        </View>
+                        <View style={styles.couponItemBadge}>
+                          <Text style={styles.couponItemSave}>Save</Text>
+                          <Text style={styles.couponItemBadgeText}>
+                            ₹{item.coupon.discount_amount}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                    renderInputSearch={onSearch => (
+                      <View>
+                        <View style={styles.searchContainer}>
+                          <TextInput
+                            style={styles.searchInput}
+                            value={searchQuery}
+                            onChangeText={text => {
+                              setSearchQuery(text);
+                              onSearch(text);
+                            }}
+                            placeholder="Type to search..."
+                            placeholderTextColor="#8a9fb5"
+                            autoCorrect={false}
+                          />
+                          {searchQuery.length > 0 && (
+                            <TouchableOpacity
+                              onPress={() => {
+                                handleClearSearch();
+                                onSearch('');
+                              }}
+                              style={styles.clearButton}
+                            >
+                              <Text style={styles.clearButtonText}>✕</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        {selectedCategories.length > 0 && (
+                          <View style={styles.insideChipsContainer}>
+                            {selectedCategories.map(cat => (
+                              <TouchableOpacity
+                                key={cat.id}
+                                style={styles.insideChip}
+                                onPress={() => handleRemoveCategory(cat)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={styles.insideChipText}>
+                                  {cat.name}
+                                </Text>
+                                <Ionicons name="close" size={14} color="#666" />
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  />
+
+                  {/* Selected Coupon Display */}
+                  {selectedCoupon && (
+                    <View style={styles.selectedCouponDisplay}>
+                      <View style={styles.selectedCouponInfo}>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color="#4fc3f7"
+                        />
+                        <View style={styles.selectedCouponText}>
+                          <Text style={styles.selectedCouponCode}>
+                            {selectedCoupon.coupon.code}
+                          </Text>
+                          <Text style={styles.selectedCouponDiscount}>
+                            You save ₹{couponDiscount.toFixed(2)}
+                          </Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        onPress={removeCoupon}
+                        style={styles.removeCouponButton}
+                      >
+                        <Ionicons name="close" size={20} color="#ff4458" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.noCouponsMessage}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={16}
+                    color="#8a9fb5"
+                  />
+                  <Text style={styles.noCouponsText}>
+                    No applicable coupons for your cart
+                  </Text>
+                </View>
+              )}
             </View>
 
+            {/* Free Shipping Banner */}
             <View style={styles.freeShippingBanner}>
               <Text style={styles.freeShippingText}>
                 Your bag qualifies for free shipping
               </Text>
             </View>
 
+            {/* Summary Section */}
             <View style={styles.summarySection}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal:</Text>
-                <Text style={styles.summaryValue}>
-                  {formatCurrency(summaryData.subtotal)}
-                </Text>
+                <Text style={styles.summaryValue}>₹{summaryData.subtotal}</Text>
               </View>
 
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Delivery Fee:</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(0)}</Text>
+                <Text style={styles.summaryValue}>₹0</Text>
               </View>
 
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Discount:</Text>
-                <Text style={styles.discountValue}>30%</Text>
-              </View>
+              {/* Coupon Discount Row */}
+              {couponDiscount > 0 && (
+                <View style={[styles.summaryRow, styles.discountRow]}>
+                  <Text style={styles.summaryLabel}>Coupon Discount:</Text>
+                  <Text style={styles.discountValue}>
+                    -₹{couponDiscount.toFixed(2)}
+                  </Text>
+                </View>
+              )}
 
+              {/* Total Row */}
               <View style={[styles.summaryRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total:</Text>
-                <Text style={styles.totalValue}>
-                  {formatCurrency(summaryData.total)}
-                </Text>
+                <Text style={styles.totalValue}>₹{summaryData.total}</Text>
               </View>
             </View>
 
+            {/* Checkout Button */}
             <SwipeToCheckout
               onSwipeSuccess={handleCheckout}
               disabled={cartData.some(i => i.products.quantity <= 0)}
               isProcessing={placingOrder}
             />
-          </View>
+          </ScrollView>
         )}
       </ImageBackground>
       <Loader visible={placingOrder} size={120} speed={1} />
@@ -690,51 +841,14 @@ const styles = StyleSheet.create({
     bottom: -2,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(42, 56, 71, 0.98)',
+    backgroundColor: '#353F54',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 32,
-    borderTopWidth: 1,
+    borderTopWidth: 2,
     borderTopColor: 'rgba(79, 195, 247, 0.2)',
-  },
-  promoSection: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  promoInput: {
-    flex: 1,
-    backgroundColor: 'rgba(42, 56, 71, 0.8)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.3)',
-  },
-  applyButtonWrapper: {
-    shadowColor: '#4fc3f7',
-    shadowOpacity: 0.5,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  applyButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
-  },
-  applyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   freeShippingBanner: {
     backgroundColor: 'rgba(79, 195, 247, 0.15)',
@@ -788,5 +902,162 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: '#4fc3f7',
+  },
+  couponSection: {
+    marginBottom: 16,
+  },
+  couponHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  couponLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ccc',
+  },
+  savingsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(79, 195, 247, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  savingsText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4fc3f7',
+  },
+  couponDropdown: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(42, 56, 71, 0.8)',
+    marginBottom: 8,
+  },
+  couponPlaceholder: {
+    fontSize: 14,
+    color: '#8a9fb5',
+  },
+  couponSelectedText: {
+    fontSize: 14,
+    color: '#4fc3f7',
+    fontWeight: '500',
+  },
+  couponDropdownContainer: {
+    borderRadius: 12,
+    backgroundColor: '#2a3847',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+  },
+  couponInputSearch: {
+    flex: 1,
+    height: 40,
+    fontSize: 16,
+    color: '#fff',
+    padding: 8,
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#2a3847',
+  },
+  couponItem: {
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  couponItemContent: {
+    flex: 1,
+  },
+  couponItemCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4fc3f7',
+  },
+  couponItemDetails: {
+    fontSize: 12,
+    color: '#8a9fb5',
+    marginTop: 4,
+  },
+  couponItemBadge: {
+    backgroundColor: 'rgba(79, 195, 247, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  couponItemSave: {
+    fontSize: 10,
+    color: '#8a9fb5',
+    marginBottom: 2,
+  },
+  couponItemBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4fc3f7',
+  },
+  selectedCouponDisplay: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(79, 195, 247, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    marginBottom: 12,
+  },
+  selectedCouponInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  selectedCouponText: {
+    gap: 2,
+  },
+  selectedCouponCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4fc3f7',
+  },
+  selectedCouponDiscount: {
+    fontSize: 12,
+    color: '#8a9fb5',
+  },
+  removeCouponButton: {
+    padding: 4,
+  },
+  noCouponsMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  noCouponsText: {
+    fontSize: 12,
+    color: '#ff9800',
+  },
+  discountRow: {
+    marginTop: 4,
+  },
+  discountValue: {
+    fontSize: 16,
+    color: '#4fc3f7',
+    fontWeight: '600',
   },
 });
