@@ -8,7 +8,6 @@ import React, {
 } from 'react';
 import {
   View,
-  ActivityIndicator,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -24,6 +23,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '../../supabase/supabase';
 import SortBottomSheet from '../../components/admin/SortBottomSheet';
 import { useSort } from '../../hooks/useSort';
+import Loader from '../../components/shared/Loader';
 import ColumnSelectorModal from '../../components/admin/ColumnSelectorModal';
 import StatusBadge from '../../components/admin/StatusBadge';
 
@@ -389,7 +389,7 @@ export default function OrdersScreen({ navigation, route }) {
   if (loading) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#4fc3f7" />
+        <Loader size={120} speed={1} />
         <Text style={styles.loadingText}>Loading orders...</Text>
       </View>
     );

@@ -7,9 +7,10 @@ import { AuthProvider, useAuth } from './src/navigation/AuthProvider';
 import AuthStack from './src/navigation/AuthStack';
 import 'react-native-url-polyfill/auto';
 import 'react-native-get-random-values';
-import { ActivityIndicator, View, Platform, StatusBar } from 'react-native';
+import { View, Platform, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Loader from './src/components/shared/Loader';
 import CustomerTab from './src/navigation/CustomerTab';
 import ToastManager from 'toastify-react-native';
 import { MenuProvider } from 'react-native-popup-menu';
@@ -37,7 +38,7 @@ function RootNavigator() {
           backgroundColor: '#353F54',
         }}
       >
-        <ActivityIndicator size="large" color="#007AFF" />
+        <Loader size={120} speed={1} />
       </View>
     );
   }

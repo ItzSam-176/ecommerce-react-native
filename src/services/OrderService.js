@@ -3,28 +3,36 @@ import { supabase } from '../supabase/supabase';
 
 export class OrderService {
   // Create order from cart items
-  static async createOrder(cartItems) {
+  static async createOrder(cartItems, options = {}) {
+    const { coupon, discount = 0, deliveryAddressId } = options;
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Validate stock availability for all items
       const stockValidation = await this.validateStock(cartItems);
       if (!stockValidation.success) {
-        return stockValidation; // Return error details
+        return stockValidation;
       }
 
-      // Create order items
-      const orderItems = cartItems.map(item => ({
-        customer_id: user.id,
-        product_id: item.products.id,
-        quantity: item.quantity,
-        price: item.products.price,
-        status: 'Pending',
-        total_price: (item.products.price * item.quantity).toFixed(2),
-      }));
+      const orderItems = cartItems.map(item => {
+        const itemSubtotal = item.products.price * item.quantity;
+        const itemFinalPrice = Math.max(0, itemSubtotal - discount);
+
+        return {
+          customer_id: user.id,
+          product_id: item.products.id,
+          quantity: item.quantity,
+          price: item.products.price,
+          status: 'Pending',
+          total_price: itemFinalPrice.toFixed(2),
+          coupon_id: coupon?.id || null,
+          coupon_discount: discount,
+          delivery_address_id: deliveryAddressId, // ✅ ADD THIS
+          delivery_charge: 0, // Default to 0, can be updated later
+        };
+      });
 
       const { data, error } = await supabase
         .from('orders')
@@ -33,13 +41,14 @@ export class OrderService {
 
       if (error) throw error;
 
-      // Deduct stock quantities
       await this.deductStock(cartItems);
-
-      // Clear user's cart
       await this.clearCart(user.id);
 
-      return { success: true, data };
+      return {
+        success: true,
+        data,
+        orderId: data[0]?.id,
+      };
     } catch (error) {
       console.error('Error creating order:', error);
       return { success: false, error: error.message };

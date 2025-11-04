@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
-  ActivityIndicator,
   Modal,
 } from 'react-native';
+import Loader from '../../components/shared/Loader';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import SwitchToggle from 'react-native-switch-toggle';
@@ -262,7 +262,7 @@ const SettingsScreen = ({ navigation }) => {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#353F54" />
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#4fc3f7" />
+          <Loader size={120} speed={1} />
           <Text style={styles.loadTxt}>Loading…</Text>
         </View>
       </SafeAreaView>
@@ -284,7 +284,7 @@ const SettingsScreen = ({ navigation }) => {
           <View style={styles.avatarBorder}>
             {uploadingImage ? (
               <View style={styles.loadingOverlay}>
-                <ActivityIndicator size="large" color="#4fc3f7" />
+                <Loader size={120} speed={1} />
               </View>
             ) : (
               <>

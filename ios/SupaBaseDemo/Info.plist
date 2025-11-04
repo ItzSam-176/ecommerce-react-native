@@ -32,7 +32,9 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>We need your location to auto-fill your delivery address</string>
+  <key>com.google.ios.maps.API_KEY</key>
+  <string>AIzaSyBWcbq4czlNg-QRcMDwBfho0JoB12JRsUM</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -1,16 +1,14 @@
-// src/hooks/useCoupon.js
 import { useState, useCallback } from 'react';
 import { supabase } from '../supabase/supabase';
 
 export const useCoupon = () => {
   const [coupons, setCoupons] = useState([]);
-  const [applicableCoupons, setApplicableCoupons] = useState([]);
-  const [disabledCoupons, setDisabledCoupons] = useState([]);
+  const [allCoupons, setAllCoupons] = useState([]);
   const [selectedCoupon, setSelectedCoupon] = useState(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [usedCouponIds, setUsedCouponIds] = useState(new Set());
 
-  // ✅ Fetch all active coupons
   const fetchAllCoupons = useCallback(async () => {
     try {
       setLoading(true);
@@ -28,18 +26,31 @@ export const useCoupon = () => {
     }
   }, []);
 
-  // ✅ Filter applicable + disabled coupons
+  const checkUsedCoupons = useCallback(async customerId => {
+    try {
+      const { data, error } = await supabase
+        .from('coupon_usage')
+        .select('coupon_id')
+        .eq('customer_id', customerId);
+
+      if (error) throw error;
+
+      const usedIds = new Set(data?.map(item => item.coupon_id) || []);
+      setUsedCouponIds(usedIds);
+    } catch (err) {
+      console.error('[Check used coupons error]:', err);
+    }
+  }, []);
+
   const filterApplicableCoupons = useCallback(
     cartData => {
       if (!cartData || cartData.length === 0) {
-        setApplicableCoupons([]);
-        setDisabledCoupons([]);
+        setAllCoupons([]);
         setSelectedCoupon(null);
         setCouponDiscount(0);
         return;
       }
 
-      // Get all categories in cart
       const cartCategories = new Set();
       cartData.forEach(item => {
         item.products.product_categories?.forEach(pc => {
@@ -47,16 +58,13 @@ export const useCoupon = () => {
         });
       });
 
-      // Get coupons from cart categories
       const relevantCoupons = coupons.filter(coupon =>
         cartCategories.has(String(coupon.category_id)),
       );
 
-      // Separate into applicable and disabled
-      const applicable = [];
-      const disabled = [];
+      const couponList = relevantCoupons.map(coupon => {
+        const isAlreadyUsed = usedCouponIds.has(coupon.id);
 
-      relevantCoupons.forEach(coupon => {
         const matchingSubtotal = cartData
           .filter(item =>
             item.products.product_categories?.some(
@@ -65,43 +73,46 @@ export const useCoupon = () => {
           )
           .reduce((t, item) => t + item.products.price * item.quantity, 0);
 
-        const isApplicable = matchingSubtotal >= coupon.minimum_order_value;
+        const isApplicable =
+          !isAlreadyUsed && matchingSubtotal >= coupon.minimum_order_value;
 
-        const couponObj = {
-          label: `${coupon.code} - ₹${coupon.discount_amount} off (${coupon.category.name})`,
+        let reason = null;
+        if (isAlreadyUsed) {
+          reason = 'You have already used this coupon';
+        } else if (!isApplicable) {
+          const needed = coupon.minimum_order_value - matchingSubtotal;
+          reason = `Add ₹${needed.toFixed(2)} worth of ${coupon.category.name}`;
+        }
+
+        return {
+          label: `${coupon.code} - ₹${coupon.discount_amount} off`,
           value: coupon.id,
           coupon: coupon,
           isApplicable: isApplicable,
-          reason: null,
+          isAlreadyUsed: isAlreadyUsed,
+          reason: reason,
+          matchingSubtotal: matchingSubtotal,
+          minRequired: coupon.minimum_order_value,
         };
-
-        // ✅ SET REASON IF NOT APPLICABLE
-        if (!isApplicable) {
-          const needed = coupon.minimum_order_value - matchingSubtotal;
-          couponObj.reason = `Add ₹${needed.toFixed(2)} worth ${coupon.category.name} products`;
-        }
-
-        if (isApplicable) {
-          applicable.push(couponObj);
-        } else {
-          disabled.push(couponObj);
-        }
       });
 
-      // Sort applicable by highest discount
-      const sortedApplicable = applicable.sort(
-        (a, b) => b.coupon.discount_amount - a.coupon.discount_amount,
-      );
+      const sorted = couponList.sort((a, b) => {
+        if (a.isApplicable !== b.isApplicable) {
+          return a.isApplicable ? -1 : 1;
+        }
+        if (a.isAlreadyUsed !== b.isAlreadyUsed) {
+          return a.isAlreadyUsed ? 1 : -1;
+        }
+        return b.coupon.discount_amount - a.coupon.discount_amount;
+      });
 
-      setApplicableCoupons(sortedApplicable);
-      setDisabledCoupons(disabled);
+      setAllCoupons(sorted);
     },
-    [coupons],
+    [coupons, usedCouponIds],
   );
 
-  // ✅ Select coupon
   const selectCoupon = useCallback(couponItem => {
-    if (couponItem?.isApplicable) {
+    if (couponItem?.isApplicable && !couponItem?.isAlreadyUsed) {
       setSelectedCoupon(couponItem);
       if (couponItem?.coupon) {
         setCouponDiscount(couponItem.coupon.discount_amount);
@@ -109,13 +120,11 @@ export const useCoupon = () => {
     }
   }, []);
 
-  // ✅ Remove coupon
   const removeCoupon = useCallback(() => {
     setSelectedCoupon(null);
     setCouponDiscount(0);
   }, []);
 
-  // ✅ Get coupon details
   const getCouponDetails = useCallback(() => {
     if (!selectedCoupon?.coupon) return null;
     return {
@@ -125,7 +134,6 @@ export const useCoupon = () => {
     };
   }, [selectedCoupon, couponDiscount]);
 
-  // ✅ Calculate final total
   const calculateTotal = useCallback(
     subtotal => {
       return Math.max(0, subtotal - couponDiscount);
@@ -134,21 +142,18 @@ export const useCoupon = () => {
   );
 
   return {
-    // State
     coupons,
-    applicableCoupons,
-    disabledCoupons, // ✅ NEW
+    allCoupons,
     selectedCoupon,
     couponDiscount,
     loading,
-
-    // Methods
+    usedCouponIds,
     fetchAllCoupons,
     filterApplicableCoupons,
     selectCoupon,
     removeCoupon,
     getCouponDetails,
     calculateTotal,
+    checkUsedCoupons,
   };
 };
- 

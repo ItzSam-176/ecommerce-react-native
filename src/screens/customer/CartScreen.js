@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -11,6 +17,7 @@ import {
   ScrollView,
   Image,
   Keyboard,
+  Modal,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -23,26 +30,35 @@ import formatCurrency from '../../utils/formatCurrency';
 import ShimmerProductsCard from '../../components/shimmer/ShimmerProductsCard';
 import { getProductPrimaryImage } from '../../utils/productImageHelper';
 import Loader from '../../components/shared/Loader';
-import { Dropdown } from 'react-native-element-dropdown';
 import { useCoupon } from '../../hooks/useCoupon';
-
+import CouponBottomSheet from '../../components/customer/CouponBottomSheet';
+import { useAuth } from '../../navigation/AuthProvider';
+import { supabase } from '../../supabase/supabase';
 export default function CartScreen({ navigation }) {
   const { showAlert, showConfirm } = useAlert();
   const { showToast } = useToastify();
+  const { user } = useAuth();
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingItems, setLoadingItems] = useState(new Set());
-  const [promoCode, setPromoCode] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+
+
+  const [couponSheetVisible, setCouponSheetVisible] = useState(false);
+  const couponRef = useRef(null);
+
+  const [selectedAddress, setSelectedAddress] = useState(null);
+  const [addresses, setAddresses] = useState([]);
 
   const { cartData, setCartData, removeFromCart, updateCartQuantity, getCart } =
     useCart([], null, navigation);
 
   // ✅ Use coupon hook
   const {
-    applicableCoupons,
+    allCoupons,
     selectedCoupon,
     couponDiscount,
     loading: couponLoading,
@@ -51,7 +67,25 @@ export default function CartScreen({ navigation }) {
     selectCoupon,
     removeCoupon,
     calculateTotal,
+    checkUsedCoupons,
   } = useCoupon();
+
+  useEffect(() => {
+    if (user?.id) {
+      checkUsedCoupons(user.id);
+    }
+  }, [user?.id, checkUsedCoupons]);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadAddresses();
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    console.log('Selected Coupon Updated:', selectedCoupon);
+    couponRef.current = selectedCoupon;
+  }, [selectedCoupon]);
 
   useFocusEffect(
     useCallback(() => {
@@ -111,6 +145,18 @@ export default function CartScreen({ navigation }) {
     };
   }, [cartData, couponDiscount, calculateTotal]);
 
+  const maxSavings = useMemo(() => {
+    const applicableCoupon = allCoupons.find(
+      c => c.isApplicable && c.coupon?.discount_amount > 0,
+    );
+    return applicableCoupon?.coupon?.discount_amount || 0;
+  }, [allCoupons]);
+
+  const applicableCouponsCount = useMemo(
+    () => allCoupons.filter(c => c.isApplicable).length,
+    [allCoupons],
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     const res = await getCart();
@@ -119,6 +165,25 @@ export default function CartScreen({ navigation }) {
     }
     setRefreshing(false);
   }, [getCart]);
+
+  const loadAddresses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('delivery_addresses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false });
+
+      if (error) throw error;
+      setAddresses(data || []);
+
+      // Auto-select default address
+      const defaultAddr = data?.find(a => a.is_default);
+      if (defaultAddr) setSelectedAddress(defaultAddr);
+    } catch (error) {
+      console.error('[ERROR] Load addresses:', error);
+    }
+  };
 
   const handleIncrement = async item => {
     const originalQuantity = item.quantity;
@@ -244,8 +309,24 @@ export default function CartScreen({ navigation }) {
       { confirmText: 'Remove', destructive: true },
     );
   };
-
+  // Update handleCheckout to require address
   const handleCheckout = async () => {
+    if (!selectedAddress) {
+      showAlert('Error', 'Please select a delivery address', 'error');
+      return;
+    }
+
+    console.log('Coupon from Ref:', couponRef.current);
+    const couponToUse = couponRef.current;
+    const discountAmount = couponToUse?.coupon.discount_amount || 0;
+
+    const cartSubtotal = cartData.reduce(
+      (t, i) => t + i.products.price * i.quantity,
+      0,
+    );
+    const finalTotal = Math.max(0, cartSubtotal - discountAmount);
+    const formattedTotal = formatCurrency(finalTotal.toFixed(2));
+
     if (cartData.length === 0) {
       showAlert('Error', 'Your cart is empty', 'error');
       return;
@@ -264,19 +345,26 @@ export default function CartScreen({ navigation }) {
 
     showConfirm(
       'Confirm Order',
-      `Place order for ${formatCurrency(summaryData.total)}?`,
+      `Place order for ${formattedTotal}?\nDelivering to: ${selectedAddress.label}`,
       async () => {
         setPlacingOrder(true);
+
         try {
           const result = await OrderService.createOrder(cartData, {
-            coupon: selectedCoupon?.coupon,
-            discount: couponDiscount,
+            coupon: couponToUse?.coupon,
+            discount: discountAmount,
+            deliveryAddressId: selectedAddress.id,
           });
 
           if (result.success) {
+            await recordCouponUsageFromOrder(result.orderId);
+
             setCartData([]);
             getCart();
-            removeCoupon(); // ✅ Clear coupon after order
+            removeCoupon();
+            if (user?.id) {
+              await checkUsedCoupons(user.id);
+            }
             setPlacingOrder(false);
             showToast('Order placed successfully!', '', 'success');
           } else {
@@ -289,6 +377,7 @@ export default function CartScreen({ navigation }) {
           }
         } catch (error) {
           setPlacingOrder(false);
+          console.error('Checkout error:', error);
           showAlert('Error', 'Failed to place order', 'error');
         }
       },
@@ -297,6 +386,46 @@ export default function CartScreen({ navigation }) {
         cancelText: 'Cancel',
       },
     );
+  };
+
+  const recordCouponUsageFromOrder = async orderId => {
+    try {
+      if (!orderId) {
+        console.log('No order ID provided');
+        return;
+      }
+
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .select('coupon_id')
+        .eq('id', orderId)
+        .single();
+
+      console.log('recordCouponUsageFromOrder', orderData);
+      console.log('Order Error recordCouponUsageFromOrder', orderError);
+
+      if (orderError || !orderData?.coupon_id) {
+        console.log('No coupon in this order');
+        return;
+      }
+
+      const { error } = await supabase.from('coupon_usage').insert([
+        {
+          coupon_id: orderData.coupon_id,
+          customer_id: user.id,
+          order_id: orderId,
+          used_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) {
+        console.error('[Coupon usage recording error]:', error);
+      } else {
+        console.log('[Coupon usage recorded successfully]');
+      }
+    } catch (err) {
+      console.error('[Coupon usage recording exception]:', err);
+    }
   };
 
   const renderCartItem = ({ item }) => {
@@ -437,169 +566,223 @@ export default function CartScreen({ navigation }) {
           contentContainerStyle={[
             styles.listContainer,
             cartData.length === 0 && styles.emptyListContainer,
-            cartData.length > 0 && { paddingBottom: 550 },
+            cartData.length > 0 && { paddingBottom: 520 },
           ]}
           ListEmptyComponent={renderEmptyCart}
           refreshing={refreshing}
           onRefresh={onRefresh}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled" // ✅ ADD THIS
-          scrollEnabled={!keyboardVisible} //
+          keyboardShouldPersistTaps="handled"
+          scrollEnabled={!keyboardVisible}
         />
 
         {cartData.length > 0 && (
           <ScrollView
             style={styles.bottomSection}
-            scrollEnabled={false} // ✅ Prevent scrolling, just layout
-            nestedScrollEnabled={true} // ✅ Allow nested scrolls
+            scrollEnabled={false}
+            nestedScrollEnabled={true}
           >
-            {/* ✅ UPDATED COUPON SECTION */}
+            {/* DELIVERY ADDRESS SECTION */}
+            {/* DELIVERY ADDRESS SECTION - COMPACT */}
+            <View style={styles.addressSelectionSection}>
+              <View style={styles.addressSectionHeader}>
+                <Text style={styles.addressSectionTitle}>Delivery Address</Text>
+              </View>
+
+              {selectedAddress ? (
+                <TouchableOpacity
+                  style={styles.selectedAddressCompact}
+                  onPress={() => setShowAddressModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.selectedAddressCompactContent}>
+                    <View>
+                      <Text style={styles.selectedAddressLabel}>
+                        {selectedAddress.label}
+                      </Text>
+                      <Text
+                        style={styles.selectedAddressText}
+                        numberOfLines={1}
+                      >
+                        {selectedAddress.address}
+                      </Text>
+                      <Text
+                        style={styles.selectedAddressText}
+                        numberOfLines={1}
+                      >
+                        {selectedAddress.city}, {selectedAddress.zip_code}
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-down" size={20} color="#4fc3f7" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.addAddressPrompt}
+                  onPress={() =>
+                    navigation.navigate('SettingStack', {
+                      screen: 'UserDetailsScreen',
+                    })
+                  }
+                >
+                  <Ionicons
+                    name="add-circle-outline"
+                    size={20}
+                    color="#4fc3f7"
+                  />
+                  <Text style={styles.addAddressPromptText}>
+                    Add a delivery address
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* ADDRESS SELECTION MODAL */}
+            <Modal
+              visible={showAddressModal}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setShowAddressModal(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>
+                      Select Delivery Address
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setShowAddressModal(false)}
+                    >
+                      <Ionicons name="close" size={24} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <FlatList
+                    data={addresses}
+                    keyExtractor={item => item.id}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[
+                          styles.modalAddressCard,
+                          selectedAddress?.id === item.id &&
+                            styles.modalAddressCardSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedAddress(item);
+                          setShowAddressModal(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.modalAddressCardHeader}>
+                          <View style={styles.radioButton}>
+                            {selectedAddress?.id === item.id && (
+                              <View style={styles.radioButtonSelected} />
+                            )}
+                          </View>
+                          <View style={styles.modalAddressCardTitleContainer}>
+                            <Text style={styles.modalAddressCardLabel}>
+                              {item.label}
+                            </Text>
+                            {item.is_default && (
+                              <View style={styles.defaultBadge}>
+                                <Text style={styles.defaultBadgeText}>
+                                  Default
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <Text style={styles.modalAddressCardText}>
+                          {item.address}
+                        </Text>
+                        <Text style={styles.modalAddressCardText}>
+                          {item.city}, {item.zip_code}, {item.country}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    scrollEnabled={true}
+                    nestedScrollEnabled={true}
+                  />
+
+                  <TouchableOpacity
+                    style={styles.addNewAddressButton}
+                    onPress={() => {
+                      setShowAddressModal(false);
+                      navigation.navigate('SettingStack', {
+                        screen: 'UserDetailsScreen',
+                      });
+                    }}
+                  >
+                    <Ionicons name="add" size={20} color="#4fc3f7" />
+                    <Text style={styles.addNewAddressButtonText}>
+                      Add New Address
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+
+            {/* COUPON SECTION */}
             <View style={styles.couponSection}>
               <View style={styles.couponHeader}>
                 <Text style={styles.couponLabel}>Apply Coupon</Text>
-                {/* ✅ Show savings badge */}
-                {applicableCoupons.length > 0 && (
+                {maxSavings > 0 && (
                   <View style={styles.savingsBadge}>
                     <Ionicons name="pricetag" size={12} color="#4fc3f7" />
                     <Text style={styles.savingsText}>
-                      Save up to ₹{applicableCoupons[0]?.coupon.discount_amount}
+                      Save up to ₹{maxSavings}
                     </Text>
                   </View>
                 )}
               </View>
 
-              {applicableCoupons.length > 0 ? (
-                <View>
-                  <Dropdown
-                    style={styles.couponDropdown}
-                    placeholderStyle={styles.couponPlaceholder}
-                    selectedTextStyle={styles.couponSelectedText}
-                    containerStyle={styles.couponDropdownContainer}
-                    data={applicableCoupons}
-                    inputSearchStyle={styles.couponInputSearch}
-                    search={true}
-                    maxHeight={250} // ✅ REDUCED HEIGHT
-                    labelField="label"
-                    valueField="value"
-                    placeholder="Select coupon..."
-                    value={selectedCoupon?.value}
-                    onChange={selectCoupon}
-                    activeColor="rgba(79, 195, 247, 0.3)"
-                    renderItem={item => (
-                      <View style={styles.couponItem}>
-                        <View style={styles.couponItemContent}>
-                          <Text style={styles.couponItemCode}>
-                            {item.coupon.code}
-                          </Text>
-                          <Text style={styles.couponItemDetails}>
-                            {item.coupon.category.name}
-                          </Text>
-                        </View>
-                        <View style={styles.couponItemBadge}>
-                          <Text style={styles.couponItemSave}>Save</Text>
-                          <Text style={styles.couponItemBadgeText}>
-                            ₹{item.coupon.discount_amount}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                    renderInputSearch={onSearch => (
-                      <View>
-                        <View style={styles.searchContainer}>
-                          <TextInput
-                            style={styles.searchInput}
-                            value={searchQuery}
-                            onChangeText={text => {
-                              setSearchQuery(text);
-                              onSearch(text);
-                            }}
-                            placeholder="Type to search..."
-                            placeholderTextColor="#8a9fb5"
-                            autoCorrect={false}
-                          />
-                          {searchQuery.length > 0 && (
-                            <TouchableOpacity
-                              onPress={() => {
-                                handleClearSearch();
-                                onSearch('');
-                              }}
-                              style={styles.clearButton}
-                            >
-                              <Text style={styles.clearButtonText}>✕</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-
-                        {selectedCategories.length > 0 && (
-                          <View style={styles.insideChipsContainer}>
-                            {selectedCategories.map(cat => (
-                              <TouchableOpacity
-                                key={cat.id}
-                                style={styles.insideChip}
-                                onPress={() => handleRemoveCategory(cat)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={styles.insideChipText}>
-                                  {cat.name}
-                                </Text>
-                                <Ionicons name="close" size={14} color="#666" />
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  />
-
-                  {/* Selected Coupon Display */}
-                  {selectedCoupon && (
-                    <View style={styles.selectedCouponDisplay}>
-                      <View style={styles.selectedCouponInfo}>
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={18}
-                          color="#4fc3f7"
-                        />
-                        <View style={styles.selectedCouponText}>
-                          <Text style={styles.selectedCouponCode}>
-                            {selectedCoupon.coupon.code}
-                          </Text>
-                          <Text style={styles.selectedCouponDiscount}>
-                            You save ₹{couponDiscount.toFixed(2)}
-                          </Text>
-                        </View>
-                      </View>
-                      <TouchableOpacity
-                        onPress={removeCoupon}
-                        style={styles.removeCouponButton}
-                      >
-                        <Ionicons name="close" size={20} color="#ff4458" />
-                      </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setCouponSheetVisible(true)}
+                style={styles.couponSelector}
+                activeOpacity={0.7}
+              >
+                {selectedCoupon ? (
+                  <View style={styles.selectedCouponPreview}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={18}
+                      color="#4fc3f7"
+                    />
+                    <View style={styles.selectedCouponTextContainer}>
+                      <Text style={styles.selectedCouponCode}>
+                        {selectedCoupon.coupon.code}
+                      </Text>
+                      <Text style={styles.selectedCouponSavings}>
+                        Save ₹{couponDiscount.toFixed(2)}
+                      </Text>
                     </View>
-                  )}
-                </View>
-              ) : (
-                <View style={styles.noCouponsMessage}>
-                  <Ionicons
-                    name="alert-circle-outline"
-                    size={16}
-                    color="#8a9fb5"
-                  />
-                  <Text style={styles.noCouponsText}>
-                    No applicable coupons for your cart
-                  </Text>
-                </View>
-              )}
+                  </View>
+                ) : (
+                  <View style={styles.couponPlaceholderContainer}>
+                    <Ionicons
+                      name="pricetag-outline"
+                      size={18}
+                      color="#8a9fb5"
+                    />
+                    <Text style={styles.couponPlaceholder}>
+                      {applicableCouponsCount > 0
+                        ? `${applicableCouponsCount} coupon${
+                            applicableCouponsCount > 1 ? 's' : ''
+                          } available`
+                        : 'No coupons available'}
+                    </Text>
+                  </View>
+                )}
+                <Ionicons name="chevron-forward" size={20} color="#8a9fb5" />
+              </TouchableOpacity>
             </View>
 
-            {/* Free Shipping Banner */}
             <View style={styles.freeShippingBanner}>
               <Text style={styles.freeShippingText}>
                 Your bag qualifies for free shipping
               </Text>
             </View>
 
-            {/* Summary Section */}
             <View style={styles.summarySection}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal:</Text>
@@ -611,7 +794,6 @@ export default function CartScreen({ navigation }) {
                 <Text style={styles.summaryValue}>₹0</Text>
               </View>
 
-              {/* Coupon Discount Row */}
               {couponDiscount > 0 && (
                 <View style={[styles.summaryRow, styles.discountRow]}>
                   <Text style={styles.summaryLabel}>Coupon Discount:</Text>
@@ -621,14 +803,12 @@ export default function CartScreen({ navigation }) {
                 </View>
               )}
 
-              {/* Total Row */}
               <View style={[styles.summaryRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total:</Text>
                 <Text style={styles.totalValue}>₹{summaryData.total}</Text>
               </View>
             </View>
 
-            {/* Checkout Button */}
             <SwipeToCheckout
               onSwipeSuccess={handleCheckout}
               disabled={cartData.some(i => i.products.quantity <= 0)}
@@ -637,11 +817,21 @@ export default function CartScreen({ navigation }) {
           </ScrollView>
         )}
       </ImageBackground>
+
+      <CouponBottomSheet
+        isVisible={couponSheetVisible}
+        onClose={() => setCouponSheetVisible(false)}
+        allCoupons={allCoupons}
+        selectedCoupon={selectedCoupon}
+        onCouponSelect={selectCoupon}
+        onCouponRemove={removeCoupon}
+      />
+
       <Loader visible={placingOrder} size={120} speed={1} />
     </View>
   );
 }
-
+// COMPLETE STYLESHEET
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -651,41 +841,6 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 16,
-  },
-  orderingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  orderingBox: {
-    backgroundColor: 'rgba(42, 56, 71, 0.95)',
-    padding: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.3)',
-  },
-  orderingText: {
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 16,
-    fontWeight: '600',
   },
   listContainer: {
     paddingHorizontal: 16,
@@ -850,6 +1005,92 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: 'rgba(79, 195, 247, 0.2)',
   },
+  couponSection: {
+    marginBottom: 16,
+  },
+  couponHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  couponLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ccc',
+  },
+  savingsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(79, 195, 247, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  savingsText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4fc3f7',
+  },
+  couponSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(42, 56, 71, 0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    marginBottom: 8,
+  },
+  selectedCouponPreview: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  selectedCouponTextContainer: {
+    flex: 1,
+  },
+  selectedCouponCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4fc3f7',
+  },
+  selectedCouponSavings: {
+    fontSize: 12,
+    color: '#8a9fb5',
+    marginTop: 2,
+  },
+  couponPlaceholderContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  couponPlaceholder: {
+    fontSize: 14,
+    color: '#8a9fb5',
+  },
+  removeCouponButtonInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 68, 88, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 68, 88, 0.3)',
+  },
+  removeCouponButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ff4458',
+  },
   freeShippingBanner: {
     backgroundColor: 'rgba(79, 195, 247, 0.15)',
     paddingVertical: 12,
@@ -882,10 +1123,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '500',
   },
+  discountRow: {
+    marginTop: 4,
+  },
   discountValue: {
     fontSize: 16,
-    color: '#fff',
-    fontWeight: '500',
+    color: '#4fc3f7',
+    fontWeight: '600',
   },
   totalRow: {
     marginTop: 8,
@@ -903,160 +1147,249 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4fc3f7',
   },
-  couponSection: {
-    marginBottom: 16,
+  addressSelectionSection: {
+    marginBottom: 20,
   },
-  couponHeader: {
+  addressSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  couponLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ccc',
-  },
-  savingsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(79, 195, 247, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  savingsText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4fc3f7',
-  },
-  couponDropdown: {
-    height: 44,
-    borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.3)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(42, 56, 71, 0.8)',
-    marginBottom: 8,
-  },
-  couponPlaceholder: {
-    fontSize: 14,
-    color: '#8a9fb5',
-  },
-  couponSelectedText: {
-    fontSize: 14,
-    color: '#4fc3f7',
-    fontWeight: '500',
-  },
-  couponDropdownContainer: {
-    borderRadius: 12,
-    backgroundColor: '#2a3847',
-    borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.3)',
-  },
-  couponInputSearch: {
-    flex: 1,
-    height: 40,
-    fontSize: 16,
-    color: '#fff',
-    padding: 8,
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: '#2a3847',
-  },
-  couponItem: {
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  couponItemContent: {
-    flex: 1,
-  },
-  couponItemCode: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#4fc3f7',
-  },
-  couponItemDetails: {
-    fontSize: 12,
-    color: '#8a9fb5',
-    marginTop: 4,
-  },
-  couponItemBadge: {
-    backgroundColor: 'rgba(79, 195, 247, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  couponItemSave: {
-    fontSize: 10,
-    color: '#8a9fb5',
-    marginBottom: 2,
-  },
-  couponItemBadgeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#4fc3f7',
-  },
-  selectedCouponDisplay: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'rgba(79, 195, 247, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(79, 195, 247, 0.3)',
     marginBottom: 12,
   },
-  selectedCouponInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  selectedCouponText: {
-    gap: 2,
-  },
-  selectedCouponCode: {
-    fontSize: 14,
-    fontWeight: '700',
+  addressSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#4fc3f7',
   },
-  selectedCouponDiscount: {
+  changeAddressLink: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4fc3f7',
+  },
+  addressesContainer: {
+    gap: 12,
+  },
+  addressCard: {
+    backgroundColor: '#2a3847',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.2)',
+    padding: 12,
+  },
+  addressCardSelected: {
+    borderColor: '#4fc3f7',
+    borderWidth: 2,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+  },
+  addressCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  radioButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#4fc3f7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioButtonSelected: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4fc3f7',
+  },
+  addressCardLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    flex: 1,
+  },
+  defaultBadge: {
+    backgroundColor: '#4fc3f7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  addressCardText: {
+    fontSize: 12,
+    color: '#8a9fb5',
+    marginBottom: 4,
+  },
+  addAddressPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    paddingVertical: 16,
+  },
+  addAddressPromptText: {
+    fontSize: 14,
+    color: '#4fc3f7',
+    fontWeight: '600',
+  },
+  addressSelectionSection: {
+    marginBottom: 16,
+  },
+  addressSectionHeader: {
+    marginBottom: 12,
+  },
+  addressSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4fc3f7',
+  },
+  selectedAddressCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2a3847',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    padding: 12,
+  },
+  selectedAddressCompactContent: {
+    flex: 1,
+  },
+  selectedAddressLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4fc3f7',
+    marginBottom: 4,
+  },
+  selectedAddressText: {
     fontSize: 12,
     color: '#8a9fb5',
   },
-  removeCouponButton: {
-    padding: 4,
+  addAddressPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    paddingVertical: 14,
   },
-  noCouponsMessage: {
+  addAddressPromptText: {
+    fontSize: 14,
+    color: '#4fc3f7',
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#353F54',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  modalAddressCard: {
+    backgroundColor: '#2a3847',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.2)',
+    padding: 12,
+    marginBottom: 12,
+  },
+  modalAddressCardSelected: {
+    borderColor: '#4fc3f7',
+    borderWidth: 2,
+    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+  },
+  modalAddressCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  modalAddressCardTitleContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255, 152, 0, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  },
+  radioButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#4fc3f7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioButtonSelected: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4fc3f7',
+  },
+  modalAddressCardLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  defaultBadge: {
+    backgroundColor: '#4fc3f7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  modalAddressCardText: {
+    fontSize: 12,
+    color: '#8a9fb5',
+    marginBottom: 4,
+  },
+  addNewAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(79, 195, 247, 0.15)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 152, 0, 0.2)',
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    paddingVertical: 14,
+    marginTop: 8,
   },
-  noCouponsText: {
-    fontSize: 12,
-    color: '#ff9800',
-  },
-  discountRow: {
-    marginTop: 4,
-  },
-  discountValue: {
-    fontSize: 16,
+  addNewAddressButtonText: {
+    fontSize: 14,
     color: '#4fc3f7',
     fontWeight: '600',
   },

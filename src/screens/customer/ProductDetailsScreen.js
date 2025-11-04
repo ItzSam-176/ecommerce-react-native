@@ -12,8 +12,8 @@ import {
   Dimensions,
   StatusBar,
   Image,
-  ActivityIndicator,
 } from 'react-native';
+import Loader from '../../components/shared/Loader';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Carousel from 'react-native-reanimated-carousel';
 import { supabase } from '../../supabase/supabase';
@@ -143,7 +143,7 @@ export default function ProductDetailsScreen({ navigation, route }) {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#353F54" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4fc3f7" />
+          <Loader size={120} speed={1} />
           <Text style={styles.loadingText}>Loading product...</Text>
         </View>
       </View>

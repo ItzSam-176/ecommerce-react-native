@@ -1,5 +1,5 @@
 // src/screens/customer/UserDetailsScreen.js
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Image,
-  ActivityIndicator,
+  FlatList,
+  Modal,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -17,53 +17,93 @@ import { supabase } from '../../supabase/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomAlert from '../../components/informative/CustomAlert';
 import Input from '../../components/Form/Input';
-import { launchImageLibrary } from 'react-native-image-picker';
-import RNFS from 'react-native-fs';
 import Loader from '../../components/shared/Loader';
+import { useAuth } from '../../navigation/AuthProvider'; // ✅ ADD THIS
+import { useLocation } from '../../hooks/useLocation';
+import { useToastify } from '../../hooks/useToastify';
+import LocationPickerModal from '../../components/customer/LocationPickerModal';
 
-const UserDetailsScreen = ({ navigation, route }) => {
-  const [userProfile, setUserProfile] = useState(
-    route?.params?.userProfile || {},
-  );
+const UserDetailsScreen = ({ navigation }) => {
+  const { user, loading: authLoading } = useAuth(); // ✅ USE THIS
+  const {
+    getCurrentLocation,
+    loading: locationLoading,
+    permissionAlert,
+    setPermissionAlert,
+  } = useLocation();
+
+  const { showToast } = useToastify();
+
+  const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [errorTitle, setErrorTitle] = useState('Error');
+
+  // Modal for adding/editing addresses
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState(null);
+
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null); // ✅ ADD THIS
+  // Add state for latitude/longitude
+  const [addressForm, setAddressForm] = useState({
+    label: '',
+    address: '',
+    city: '',
+    zip_code: '',
+    country: '',
+    state: '',
+    latitude: null, // ✅ ADD THIS
+    longitude: null, // ✅ ADD THIS
+  });
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    address: '',
-    city: '',
-    zipCode: '',
-    country: '',
   });
 
-  const hasLoadedOnce = useRef(false);
-
-  // Load initial data only once
+  // Load data when user is available
   useEffect(() => {
-    if (!hasLoadedOnce.current && route?.params?.userProfile) {
-      hasLoadedOnce.current = true;
+    if (user?.id && !authLoading) {
+      loadUserData();
     }
-  }, []);
+  }, [user?.id, authLoading]);
 
-  useEffect(() => {
-    if (userProfile) {
+  const loadUserData = async () => {
+    try {
+      // Load user profile
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
       setFormData({
-        name: userProfile.name || '',
-        email: userProfile.email || '',
-        phone: userProfile.phone ? String(userProfile.phone) : '',
-        address: userProfile.address || '',
-        city: userProfile.city || '',
-        zipCode: userProfile.zip_code ? String(userProfile.zip_code) : '',
-        country: userProfile.country || '',
+        name: profile.name || '',
+        email: profile.email || '',
+        phone: profile.phone ? String(profile.phone) : '',
       });
+
+      // Load addresses
+      const { data: addressesData, error: addressesError } = await supabase
+        .from('delivery_addresses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (addressesError) throw addressesError;
+      setAddresses(addressesData || []);
+    } catch (error) {
+      console.error('[ERROR] Load user data:', error);
+      showErrorAlert('Error', 'Failed to load profile');
     }
-  }, [userProfile]);
+  };
 
   const showError = (title, message) => {
     setErrorTitle(title);
@@ -71,123 +111,7 @@ const UserDetailsScreen = ({ navigation, route }) => {
     setShowErrorAlert(true);
   };
 
-  const handleImagePicker = async () => {
-    try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
-        quality: 0.7,
-        maxWidth: 800,
-        maxHeight: 800,
-        includeBase64: false,
-      });
-
-      if (result.didCancel) return;
-      if (result.errorCode) {
-        showError('Error', result.errorMessage || 'Failed to pick image');
-        return;
-      }
-
-      const asset = result.assets?.[0];
-      if (!asset?.uri) return;
-
-      await uploadImage(asset);
-    } catch (error) {
-      console.log('[ERROR] Image picker:', error);
-      showError('Error', 'Failed to select image');
-    }
-  };
-
-  const uploadImage = async asset => {
-    try {
-      setUploadingImage(true);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // DELETE OLD IMAGE FIRST
-      if (userProfile?.image_url) {
-        try {
-          // Extract filename from URL
-          // Example URL: https://xxx.supabase.co/storage/v1/object/public/product-images/avatars/user-id_123.jpg
-          const urlParts = userProfile.image_url.split('/');
-          const oldFileName = urlParts.slice(-2).join('/'); // Gets "avatars/user-id_123.jpg"
-
-          const { error: deleteError } = await supabase.storage
-            .from('product-images')
-            .remove([oldFileName]);
-
-          if (deleteError) {
-            console.log('[WARNING] Failed to delete old image:', deleteError);
-            // Don't throw error - continue with upload even if delete fails
-          }
-        } catch (deleteErr) {
-          console.log('[WARNING] Error during delete:', deleteErr);
-          // Continue with upload
-        }
-      }
-
-      // Read file as base64
-      const base64 = await RNFS.readFile(asset.uri, 'base64');
-      const fileName = `avatars/${user.id}.jpg`; // Use consistent filename (just user ID, no timestamp)
-
-      // Convert base64 to ArrayBuffer
-      const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
-      // Upload to Supabase Storage - use upsert to overwrite
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(fileName, arrayBuffer, {
-          contentType: 'image/jpeg',
-          upsert: true, // This overwrites if file exists
-        });
-
-      if (uploadError) {
-        console.log('[ERROR] Upload error:', uploadError);
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(fileName);
-
-      if (!urlData?.publicUrl) {
-        throw new Error('Failed to get image URL');
-      }
-
-      // Add cache buster to force image refresh
-      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
-      // Update user profile with new image URL
-      const { data, error } = await supabase
-        .from('users')
-        .update({ image_url: publicUrl })
-        .eq('id', user.id)
-        .select()
-        .single();
-
-      if (error) {
-        console.log('[ERROR] Database update error:', error);
-        throw error;
-      }
-
-      setUserProfile(data);
-      setShowSuccessAlert(true);
-
-      if (route.params?.onUpdate) {
-        route.params.onUpdate();
-      }
-    } catch (error) {
-      console.log('[ERROR] Upload image:', error);
-      showError('Error', `Failed to upload image: ${error.message}`);
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const handleSave = useCallback(async () => {
+  const handleSaveProfile = useCallback(async () => {
     if (!formData.name.trim()) {
       showError('Error', 'Name is required');
       return;
@@ -200,111 +124,277 @@ const UserDetailsScreen = ({ navigation, route }) => {
 
     try {
       setLoading(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        showError('Error', 'User not authenticated');
-        return;
-      }
 
       const updateData = {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone ? parseInt(formData.phone) : null,
-        address: formData.address.trim() || null,
-        city: formData.city.trim() || null,
-        zip_code: formData.zipCode ? parseInt(formData.zipCode) : null,
-        country: formData.country.trim() || null,
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('users')
         .update(updateData)
-        .eq('id', user.id)
-        .select()
-        .single();
+        .eq('id', user.id);
 
       if (error) throw error;
-      if (!data) throw new Error('Update failed - no data returned');
-
-      setUserProfile(data);
-      setFormData({
-        name: data.name || '',
-        email: data.email || '',
-        phone: data.phone ? String(data.phone) : '',
-        address: data.address || '',
-        city: data.city || '',
-        zipCode: data.zip_code ? String(data.zip_code) : '',
-        country: data.country || '',
-      });
-
-      setIsEditing(false);
       setShowSuccessAlert(true);
-
-      if (route.params?.onUpdate) {
-        route.params.onUpdate();
-      }
     } catch (error) {
-      console.log('[ERROR] Failed to update profile:', error.message);
-      showError(
-        'Error',
-        error.message || 'Failed to update profile. Please try again.',
-      );
+      console.error('[ERROR] Failed to update profile:', error);
+      showError('Error', error.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
-  }, [formData, route.params?.onUpdate]);
+  }, [formData, user.id]);
 
-  const handleCancel = useCallback(() => {
-    setFormData({
-      name: userProfile.name || '',
-      email: userProfile.email || '',
-      phone: userProfile.phone ? String(userProfile.phone) : '',
-      address: userProfile.address || '',
-      city: userProfile.city || '',
-      zipCode: userProfile.zip_code ? String(userProfile.zip_code) : '',
-      country: userProfile.country || '',
+  // Address Management
+  const openAddressModal = (address = null) => {
+    if (address) {
+      setEditingAddressId(address.id);
+      setAddressForm({
+        label: address.label,
+        address: address.address,
+        city: address.city,
+        zip_code: address.zip_code,
+        country: address.country,
+        state: address.state || '',
+        latitude: address.latitude, // ✅ ADD THIS
+        longitude: address.longitude, // ✅ ADD THIS
+      });
+    } else {
+      setEditingAddressId(null);
+      setAddressForm({
+        label: '',
+        address: '',
+        city: '',
+        zip_code: '',
+        country: '',
+        state: '',
+        latitude: null, // ✅ ADD THIS
+        longitude: null, // ✅ ADD THIS
+      });
+    }
+    setShowAddressModal(true);
+  };
+
+  // Update closeAddressModal
+  const closeAddressModal = () => {
+    setShowAddressModal(false);
+    setEditingAddressId(null);
+    setAddressForm({
+      label: '',
+      address: '',
+      city: '',
+      zip_code: '',
+      country: '',
+      state: '',
+      latitude: null, // ✅ ADD THIS
+      longitude: null, // ✅ ADD THIS
     });
-    setIsEditing(false);
-  }, [userProfile]);
+  };
 
-  useEffect(() => {
-    navigation.setParams({
-      onEditPress: isEditing ? handleSave : () => setIsEditing(true),
-      isEditing: isEditing,
-      editLoading: loading,
-    });
-  }, [isEditing, loading, handleSave, navigation]);
+  // Update handleSaveAddress to include coordinates
+  const handleSaveAddress = async () => {
+    if (!addressForm.label.trim()) {
+      showError('Error', 'Label is required');
+      return;
+    }
+    if (!addressForm.address.trim()) {
+      showError('Error', 'Address is required');
+      return;
+    }
+    if (!addressForm.city.trim()) {
+      showError('Error', 'City is required');
+      return;
+    }
+    if (!addressForm.state.trim()) {
+      // ✅ ADD THIS
+      showError('Error', 'State is required');
+      return;
+    }
+    if (!addressForm.zip_code.trim()) {
+      showError('Error', 'Zip code is required');
+      return;
+    }
+    if (!addressForm.country.trim()) {
+      showError('Error', 'Country is required');
+      return;
+    }
 
-  const renderField = (
-    label,
-    value,
-    key,
-    placeholder,
-    keyboardType = 'default',
-  ) => (
-    <View style={styles.fieldContainer}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {isEditing ? (
-        <Input
-          value={value}
-          onChangeText={text => setFormData({ ...formData, [key]: text })}
-          placeholder={placeholder}
-          keyboardType={keyboardType}
-        />
-      ) : (
-        <View style={styles.valueContainer}>
-          <Text style={styles.fieldValue}>{value || 'Not provided'}</Text>
-        </View>
-      )}
+    try {
+      setLoading(true);
+
+      const saveData = {
+        label: addressForm.label,
+        address: addressForm.address,
+        city: addressForm.city,
+        zip_code: addressForm.zip_code,
+        country: addressForm.country,
+        state: addressForm.state,
+        latitude: addressForm.latitude || null, // ✅ ADD THIS
+        longitude: addressForm.longitude || null, // ✅ ADD THIS
+      };
+
+      if (editingAddressId) {
+        const { error } = await supabase
+          .from('delivery_addresses')
+          .update(saveData)
+          .eq('id', editingAddressId)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('delivery_addresses').insert([
+          {
+            user_id: user.id,
+            ...saveData,
+            is_default: addresses.length === 0,
+          },
+        ]);
+
+        if (error) throw error;
+      }
+
+      // Reload addresses
+      const { data: updatedAddresses, error: fetchError } = await supabase
+        .from('delivery_addresses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (fetchError) throw fetchError;
+      setAddresses(updatedAddresses || []);
+      closeAddressModal();
+      setShowSuccessAlert(true);
+    } catch (error) {
+      console.error('[ERROR] Save address:', error);
+      showError('Error', error.message || 'Failed to save address');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add this new function
+  // In UserDetailsScreen
+  const handleGetCurrentLocation = () => {
+    setShowLocationPicker(true);
+  };
+
+  const handleDeleteAddress = async addressId => {
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('delivery_addresses')
+        .delete()
+        .eq('id', addressId);
+
+      if (error) throw error;
+
+      setAddresses(addresses.filter(a => a.id !== addressId));
+      setShowSuccessAlert(true);
+    } catch (error) {
+      console.error('[ERROR] Delete address:', error);
+      showError('Error', 'Failed to delete address');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetDefault = async addressId => {
+    try {
+      setLoading(true);
+
+      // Set all addresses to not default
+      await supabase
+        .from('delivery_addresses')
+        .update({ is_default: false })
+        .eq('user_id', user.id);
+
+      // Set selected as default
+      const { error } = await supabase
+        .from('delivery_addresses')
+        .update({ is_default: true })
+        .eq('id', addressId);
+
+      if (error) throw error;
+
+      // Reload addresses
+      const { data: updatedAddresses } = await supabase
+        .from('delivery_addresses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      setAddresses(updatedAddresses || []);
+    } catch (error) {
+      console.error('[ERROR] Set default address:', error);
+      showError('Error', 'Failed to set default address');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderAddressCard = ({ item }) => (
+    <View style={styles.addressCard}>
+      <View style={styles.addressHeader}>
+        <Text style={styles.addressLabel}>{item.label}</Text>
+        {item.is_default && (
+          <View style={styles.defaultBadge}>
+            <Text style={styles.defaultBadgeText}>DEFAULT</Text>
+          </View>
+        )}
+      </View>
+
+      <Text style={styles.addressText}>{item.address}</Text>
+      <Text style={styles.addressText}>
+        {item.city}
+        {item.state && `, ${item.state}`}
+        {item.zip_code && `, ${item.zip_code}`}, {item.country}
+      </Text>
+
+      <View style={styles.addressActions}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => openAddressModal(item)}
+        >
+          <Text style={styles.actionButtonText}>Edit</Text>
+        </TouchableOpacity>
+
+        {!item.is_default && (
+          <>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => handleSetDefault(item.id)}
+            >
+              <Ionicons name="checkmark" size={16} color="#4fc3f7" />
+              <Text style={styles.actionButtonText}>Set Default</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => handleDeleteAddress(item.id)}
+            >
+              <Ionicons name="trash" size={16} color="#ff4458" />
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
     </View>
   );
 
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Loader visible size={120} speed={1} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <Loader visible={uploadingImage || loading} size={120} speed={1} />
+      <Loader visible={loading} size={120} speed={1} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -314,135 +404,256 @@ const UserDetailsScreen = ({ navigation, route }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Profile Image Section */}
-          <View style={styles.profileImageSection}>
-            <TouchableOpacity
-              style={styles.avatarWrap}
-              onPress={handleImagePicker}
-              disabled={uploadingImage}
-              activeOpacity={0.8}
-            >
-              <View style={styles.avatarBorder}>
-                <>
-                  <Image
-                    source={
-                      userProfile?.image_url
-                        ? { uri: userProfile.image_url }
-                        : require('../../assets/default-avatar.png')
-                    }
-                    style={styles.avatar}
-                  />
-                  <View style={styles.editIconContainer}>
-                    <LinearGradient
-                      colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
-                      style={styles.editIcon}
-                    >
-                      <Ionicons name="create-outline" size={20} color="#fff" />
-                    </LinearGradient>
-                  </View>
-                </>
-              </View>
-            </TouchableOpacity>
-            <Text style={styles.changePhotoText}>Tap to change photo</Text>
-          </View>
-
           {/* Personal Information */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Personal Information</Text>
 
-            {renderField(
-              'Full Name',
-              formData.name,
-              'name',
-              'Enter your full name',
-            )}
-            {renderField(
-              'Email Address',
-              formData.email,
-              'email',
-              'Enter your email',
-              'email-address',
-            )}
-            {renderField(
-              'Phone Number',
-              formData.phone,
-              'phone',
-              'Enter your phone number',
-              'phone-pad',
-            )}
-          </View>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Full Name</Text>
+              <Input
+                value={formData.name}
+                onChangeText={text => setFormData({ ...formData, name: text })}
+                placeholder="Enter your full name"
+              />
+            </View>
 
-          {/* Address Information */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Address Information</Text>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Email Address</Text>
+              <Input
+                value={formData.email}
+                onChangeText={text => setFormData({ ...formData, email: text })}
+                placeholder="Enter your email"
+                keyboardType="email-address"
+              />
+            </View>
 
-            {renderField(
-              'Street Address',
-              formData.address,
-              'address',
-              'Enter your street address',
-            )}
-            {renderField('City', formData.city, 'city', 'Enter your city')}
-            {renderField(
-              'Zip Code',
-              formData.zipCode,
-              'zipCode',
-              'Enter your zip code',
-              'numeric',
-            )}
-            {renderField(
-              'Country',
-              formData.country,
-              'country',
-              'Enter your country',
-            )}
-          </View>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Phone Number</Text>
+              <Input
+                value={formData.phone}
+                onChangeText={text => setFormData({ ...formData, phone: text })}
+                placeholder="Enter your phone number"
+                keyboardType="phone-pad"
+              />
+            </View>
 
-          {/* Action Buttons (only show when editing) */}
-          {isEditing && (
-            <View style={styles.actionButtonsContainer}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={handleCancel}
-                activeOpacity={0.8}
-                disabled={loading}
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSaveProfile}
+              activeOpacity={0.8}
+              disabled={loading}
+            >
+              <LinearGradient
+                colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
+                style={styles.buttonGradient}
               >
-                <LinearGradient
-                  colors={[
-                    'rgba(255, 255, 255, 0.15)',
-                    'rgba(255, 255, 255, 0.05)',
-                  ]}
-                  style={styles.buttonGradient}
-                >
-                  <Ionicons name="close-outline" size={20} color="#8a9fb5" />
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                <Ionicons name="checkmark-outline" size={20} color="#fff" />
+                <Text style={styles.saveButtonText}>Save Profile</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
 
+          {/* Delivery Addresses */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderWithButton}>
+              <Text style={styles.sectionTitle}>Delivery Addresses</Text>
               <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSave}
-                activeOpacity={0.8}
-                disabled={loading}
+                style={styles.addButton}
+                onPress={() => openAddressModal()}
+              >
+                <Ionicons name="add" size={20} color="#4fc3f7" />
+              </TouchableOpacity>
+            </View>
+
+            {addresses.length > 0 ? (
+              <FlatList
+                data={addresses}
+                renderItem={renderAddressCard}
+                keyExtractor={item => item.id}
+                scrollEnabled={false}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="location-outline" size={48} color="#8a9fb5" />
+                <Text style={styles.emptyStateText}>
+                  No addresses added yet
+                </Text>
+                <TouchableOpacity
+                  style={styles.addAddressButton}
+                  onPress={() => openAddressModal()}
+                >
+                  <Text style={styles.addAddressButtonText}>
+                    Add Your First Address
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Add/Edit Address Modal */}
+      <Modal
+        visible={showAddressModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeAddressModal}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <KeyboardAvoidingView
+            style={styles.flex}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <Loader visible={loading || locationLoading} size={120} speed={1} />
+            <ScrollView
+              style={styles.modalContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {editingAddressId ? 'Edit Address' : 'Add New Address'}
+                </Text>
+              </View>
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Label (e.g., Home, Work)</Text>
+                <Input
+                  value={addressForm?.label || ''}
+                  onChangeText={text =>
+                    setAddressForm({ ...addressForm, label: text })
+                  }
+                  placeholder="Enter label"
+                />
+              </View>
+              {/* Add this after Country field in modal, BEFORE modal buttons */}
+              <TouchableOpacity
+                style={styles.getLocationButton}
+                onPress={handleGetCurrentLocation}
+                disabled={loading || locationLoading}
               >
                 <LinearGradient
                   colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
                   style={styles.buttonGradient}
                 >
-                  <Ionicons name="checkmark-outline" size={20} color="#fff" />
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                  <Ionicons name="location" size={18} color="#fff" />
+                  <Text style={styles.getLocationButtonText}>
+                    {locationLoading
+                      ? 'Getting Location...'
+                      : 'Use My Location'}
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Street Address</Text>
+                <Input
+                  value={addressForm.address}
+                  onChangeText={text =>
+                    setAddressForm({ ...addressForm, address: text })
+                  }
+                  placeholder="Enter street address"
+                />
+              </View>
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>City</Text>
+                <Input
+                  value={addressForm.city}
+                  onChangeText={text =>
+                    setAddressForm({ ...addressForm, city: text })
+                  }
+                  placeholder="Enter city"
+                />
+              </View>
+              {/* State */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>State</Text>
+                <Input
+                  value={addressForm.state || ''}
+                  onChangeText={text =>
+                    setAddressForm({ ...addressForm, state: text })
+                  }
+                  placeholder="Enter state"
+                />
+              </View>
 
-      {/* Success Alert */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Zip Code</Text>
+                <Input
+                  value={addressForm.zip_code}
+                  onChangeText={text =>
+                    setAddressForm({ ...addressForm, zip_code: text })
+                  }
+                  placeholder="Enter zip code"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Country</Text>
+                <Input
+                  value={addressForm.country}
+                  onChangeText={text =>
+                    setAddressForm({ ...addressForm, country: text })
+                  }
+                  placeholder="Enter country"
+                />
+              </View>
+              <View style={styles.modalActionButtons}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={closeAddressModal}
+                  disabled={loading}
+                >
+                  <LinearGradient
+                    colors={[
+                      'rgba(255, 255, 255, 0.15)',
+                      'rgba(255, 255, 255, 0.05)',
+                    ]}
+                    style={styles.buttonGradient}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={handleSaveAddress}
+                  disabled={loading}
+                >
+                  <LinearGradient
+                    colors={['#5fd4f7', '#4fc3f7', '#3aa5c7']}
+                    style={styles.buttonGradient}
+                  >
+                    <Text style={styles.saveButtonText}>Save Address</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+            <LocationPickerModal
+              visible={showLocationPicker}
+              onClose={() => setShowLocationPicker(false)}
+              onLocationSelected={location => {
+                setAddressForm(prev => ({
+                  ...prev,
+                  address: location.address,
+                  city: location.city,
+                  state: location.state,
+                  zip_code: location.zip_code,
+                  country: location.country,
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                }));
+                showToast('Location selected!', '', 'success');
+                setShowLocationPicker(false);
+              }}
+              initialLocation={selectedLocation || null}
+            />
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Alerts */}
       <CustomAlert
         visible={showSuccessAlert}
         title="Success"
-        message="Your profile has been updated successfully!"
+        message="Operation completed successfully!"
         type="success"
         icon={
           <Ionicons name="checkmark-circle-outline" size={48} color="#4fc3f7" />
@@ -458,7 +669,6 @@ const UserDetailsScreen = ({ navigation, route }) => {
         dismissible={true}
       />
 
-      {/* Error Alert */}
       <CustomAlert
         visible={showErrorAlert}
         title={errorTitle}
@@ -477,6 +687,41 @@ const UserDetailsScreen = ({ navigation, route }) => {
         onBackdropPress={() => setShowErrorAlert(false)}
         dismissible={true}
       />
+
+      {/* Permission Alert */}
+      <CustomAlert
+        visible={permissionAlert.visible}
+        title={permissionAlert.title}
+        message={permissionAlert.message}
+        type={permissionAlert.type === 'permission_denied' ? 'error' : 'info'}
+        icon={
+          <Ionicons
+            name={
+              permissionAlert.type === 'permission_denied'
+                ? 'close-circle-outline'
+                : 'location-outline'
+            }
+            size={48}
+            color={
+              permissionAlert.type === 'permission_denied'
+                ? '#ff4458'
+                : '#4fc3f7'
+            }
+          />
+        }
+        buttons={[
+          {
+            text: 'OK',
+            style: 'default',
+            onPress: () =>
+              setPermissionAlert({ ...permissionAlert, visible: false }),
+          },
+        ]}
+        onBackdropPress={() =>
+          setPermissionAlert({ ...permissionAlert, visible: false })
+        }
+        dismissible={true}
+      />
     </SafeAreaView>
   );
 };
@@ -492,72 +737,25 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
-  },
-  profileImageSection: {
-    alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 20,
-  },
-  avatarWrap: {
-    marginBottom: 12,
-  },
-  avatarBorder: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#4fc3f7',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    elevation: 8,
-    position: 'relative',
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#2a3847',
-  },
-  editIconContainer: {
-    position: 'absolute',
-    bottom: -5,
-    right: 3,
-    shadowColor: '#4fc3f7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  editIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#353F54',
-  },
-  changePhotoText: {
-    fontSize: 14,
-    color: '#8a9fb5',
-    marginTop: 8,
+    paddingTop: 16,
   },
   section: {
-    marginVertical: 24,
+    marginVertical: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#4fc3f7',
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  sectionHeaderWithButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   fieldContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   fieldLabel: {
     fontSize: 14,
@@ -565,21 +763,157 @@ const styles = StyleSheet.create({
     color: '#8a9fb5',
     marginBottom: 8,
   },
-  valueContainer: {
-    backgroundColor: '#2a3847',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 48,
-    justifyContent: 'center',
+
+  getLocationButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+    shadowColor: '#4fc3f7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  fieldValue: {
+  getLocationButtonText: {
     fontSize: 16,
+    fontWeight: '600',
     color: '#fff',
   },
-  actionButtonsContainer: {
+
+  buttonGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#8a9fb5',
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2a3847',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addressCard: {
+    backgroundColor: '#2a3847',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.2)',
+    padding: 16,
+    marginBottom: 12,
+  },
+  addressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addressLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4fc3f7',
+  },
+  defaultBadge: {
+    backgroundColor: '#4fc3f7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  addressText: {
+    fontSize: 14,
+    color: '#ccc',
+    marginBottom: 4,
+  },
+  addressActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(79, 195, 247, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4fc3f7',
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(255, 68, 88, 0.15)',
+    borderColor: 'rgba(255, 68, 88, 0.3)',
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ff4458',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#8a9fb5',
+    marginTop: 12,
+  },
+  addAddressButton: {
+    marginTop: 16,
+    backgroundColor: 'rgba(79, 195, 247, 0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 195, 247, 0.3)',
+  },
+  addAddressButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4fc3f7',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#353F54',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalHeader: {
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4fc3f7',
+  },
+  modalActionButtons: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 32,
@@ -595,30 +929,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#4fc3f7',
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
+    shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 5,
-  },
-  buttonGradient: {
-    flexDirection: 'row',
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#8a9fb5',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
   },
 });
 

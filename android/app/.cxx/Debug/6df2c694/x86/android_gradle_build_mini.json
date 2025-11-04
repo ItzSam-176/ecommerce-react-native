@@ -5,6 +5,7 @@
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-gesture-handler/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-haptic-feedback/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-maps/android/src/main/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-reanimated/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt",
@@ -99,6 +100,11 @@
         "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.x86/libjsi.so",
         "/Users/zluck/.gradle/caches/8.14.3/transforms/48f32c88ab848eeaa4d6425b771aa34b/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so"
       ]
+    },
+    "react_codegen_RNMapsSpecs::@5748abef1962d24942ec": {
+      "artifactName": "react_codegen_RNMapsSpecs",
+      "abi": "x86",
+      "runtimeFiles": []
     },
     "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
       "artifactName": "react_codegen_rnasyncstorage",

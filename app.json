@@ -1,4 +1,12 @@
 {
   "name": "SupaBaseDemo",
-  "displayName": "SupaBaseDemo"
+  "displayName": "SupaBaseDemo",
+  "plugins": [
+    [
+      "react-native-maps",
+      {
+        "ios_language_en": true
+      }
+    ]
+  ]
 }
