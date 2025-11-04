@@ -1569,6 +1569,11 @@
     prompts "^2.4.2"
     semver "^7.5.2"
 
+"@react-native-community/geolocation@^3.4.0":
+  version "3.4.0"
+  resolved "https://registry.yarnpkg.com/@react-native-community/geolocation/-/geolocation-3.4.0.tgz#8b6ee024a71cf94526ab796af1e9ae140684802c"
+  integrity sha512-bzZH89/cwmpkPMKKveoC72C4JH0yF4St5Ceg/ZM9pA1SqX9MlRIrIrrOGZ/+yi++xAvFDiYfihtn9TvXWU9/rA==
+
 "@react-native/assets-registry@0.81.4":
   version "0.81.4"
   resolved "https://registry.yarnpkg.com/@react-native/assets-registry/-/assets-registry-0.81.4.tgz#bfa477c8e9d54d6ef4ab6e81b886d5be13c09fbd"
@@ -4290,7 +4295,7 @@ internal-slot@^1.1.0:
     hasown "^2.0.2"
     side-channel "^1.1.0"
 
-invariant@^2.2.4:
+invariant@2.2.4, invariant@^2.2.4:
   version "2.2.4"
   resolved "https://registry.yarnpkg.com/invariant/-/invariant-2.2.4.tgz#610f3c92c9359ce1db616e538008d23ff35158e6"
   integrity sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==
@@ -6151,10 +6156,10 @@ react-native-linear-gradient@^2.8.3:
   resolved "https://registry.yarnpkg.com/react-native-linear-gradient/-/react-native-linear-gradient-2.8.3.tgz#9a116649f86d74747304ee13db325e20b21e564f"
   integrity sha512-KflAXZcEg54PXkLyflaSZQ3PJp4uC4whM7nT/Uot9m0e/qxFV3p6uor1983D1YOBJbJN7rrWdqIjq0T42jOJyA==
 
-react-native-maps@^1.26.18:
-  version "1.26.18"
-  resolved "https://registry.yarnpkg.com/react-native-maps/-/react-native-maps-1.26.18.tgz#1bb412d236a1a187c93f5e63a8d912d8d5beca6d"
-  integrity sha512-aJeczgR2Y5AeAazod3QAIkpAqNteYjKlZUH8YRKueaORsjdDbGryD/4aPL8UR4J6bjsSJK8lgzoMCvCky6FRpA==
+react-native-maps@1.20.0:
+  version "1.20.0"
+  resolved "https://registry.yarnpkg.com/react-native-maps/-/react-native-maps-1.20.0.tgz#de1cbd41fb16084a6f00d1658a3f4f98991447b1"
+  integrity sha512-3NoLwcmdDTLeEhCq+BVOTRlNDte7+RlLkVwMR/hZZFk8jKM/94eznI+mown2NxuRARXD9vdd33NSXQz1oMuozA==
   dependencies:
     "@types/geojson" "^7946.0.13"
 
@@ -6251,6 +6256,14 @@ react-native-vector-icons@*, react-native-vector-icons@^10.3.0:
   dependencies:
     prop-types "^15.7.2"
     yargs "^16.1.1"
+
+react-native-webview@^13.16.0:
+  version "13.16.0"
+  resolved "https://registry.yarnpkg.com/react-native-webview/-/react-native-webview-13.16.0.tgz#c995148f944a7eaf12389f0e6d5c6f5e6a775686"
+  integrity sha512-Nh13xKZWW35C0dbOskD7OX01nQQavOzHbCw9XoZmar4eXCo7AvrYJ0jlUfRVVIJzqINxHlpECYLdmAdFsl9xDA==
+  dependencies:
+    escape-string-regexp "^4.0.0"
+    invariant "2.2.4"
 
 react-native@0.81.4:
   version "0.81.4"

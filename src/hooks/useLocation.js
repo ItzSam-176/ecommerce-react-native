@@ -160,11 +160,11 @@ export const useLocation = () => {
   }, []);
 
   // ✅ MAIN FUNCTION
+  // src/hooks/useLocation.js - FIX THE ERROR HANDLING
   const getCurrentLocation = useCallback(async () => {
     setLoading(true);
 
     try {
-      // Request permission
       const hasPermission = await requestLocationPermission();
       if (!hasPermission) {
         setLoading(false);
@@ -174,17 +174,20 @@ export const useLocation = () => {
         };
       }
 
-      // Get coordinates
-      const { latitude, longitude } = await getLocationCoordinates();
-
-      // Fetch address
-      const result = await fetchAddressFromCoordinates(latitude, longitude);
+      const coords = await getLocationCoordinates();
+      const result = await fetchAddressFromCoordinates(
+        coords.latitude,
+        coords.longitude,
+      );
       setLoading(false);
       return result;
     } catch (error) {
       console.error('[ERROR] getCurrentLocation:', error);
       setLoading(false);
-      return error;
+      return {
+        success: false,
+        error: error?.error || 'Failed to get location',
+      };
     }
   }, [
     requestLocationPermission,
@@ -197,5 +200,8 @@ export const useLocation = () => {
     getCurrentLocation,
     permissionAlert,
     setPermissionAlert,
+    fetchAddressFromCoordinates,
+    getLocationCoordinates,
+    requestLocationPermission,
   };
 };

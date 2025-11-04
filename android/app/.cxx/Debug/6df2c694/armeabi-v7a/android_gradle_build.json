@@ -5,12 +5,12 @@
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-gesture-handler/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-haptic-feedback/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
-    "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-maps/android/src/main/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-reanimated/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-svg/android/src/main/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-vector-icons/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-webview/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt"
   ],
   "cleanCommandsComponents": [
@@ -37,10 +37,15 @@
         "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libreact_codegen_safeareacontext.so",
         "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libreact_codegen_rnscreens.so",
         "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libreact_codegen_rnsvg.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/48f32c88ab848eeaa4d6425b771aa34b/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so"
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/e7a76f3a87b224cb22245a21d91baee6/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so"
       ]
+    },
+    "react_codegen_RNCWebViewSpec::@eb48929f9f7453740a6c": {
+      "toolchain": "toolchain",
+      "abi": "armeabi-v7a",
+      "artifactName": "react_codegen_RNCWebViewSpec"
     },
     "react_codegen_RNHapticFeedbackSpec::@a83561f277f6afbb326c": {
       "toolchain": "toolchain",
@@ -51,11 +56,6 @@
       "toolchain": "toolchain",
       "abi": "armeabi-v7a",
       "artifactName": "react_codegen_RNImagePickerSpec"
-    },
-    "react_codegen_RNMapsSpecs::@5748abef1962d24942ec": {
-      "toolchain": "toolchain",
-      "abi": "armeabi-v7a",
-      "artifactName": "react_codegen_RNMapsSpecs"
     },
     "react_codegen_RNVectorIconsSpec::@479809fae146501fd34d": {
       "toolchain": "toolchain",
@@ -88,9 +88,9 @@
       "artifactName": "react_codegen_rnscreens",
       "output": "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libreact_codegen_rnscreens.so",
       "runtimeFiles": [
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/48f32c88ab848eeaa4d6425b771aa34b/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so"
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/e7a76f3a87b224cb22245a21d91baee6/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so"
       ]
     },
     "react_codegen_rnsvg::@4f40eb209d0c0b4a3b65": {
@@ -99,9 +99,9 @@
       "artifactName": "react_codegen_rnsvg",
       "output": "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libreact_codegen_rnsvg.so",
       "runtimeFiles": [
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/48f32c88ab848eeaa4d6425b771aa34b/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so"
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/e7a76f3a87b224cb22245a21d91baee6/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so"
       ]
     },
     "react_codegen_safeareacontext::@7984cd80db47aa7b952a": {
@@ -110,9 +110,9 @@
       "artifactName": "react_codegen_safeareacontext",
       "output": "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/build/intermediates/cxx/Debug/6df2c694/obj/armeabi-v7a/libreact_codegen_safeareacontext.so",
       "runtimeFiles": [
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/48f32c88ab848eeaa4d6425b771aa34b/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
-        "/Users/zluck/.gradle/caches/8.14.3/transforms/5e3de19cdc6bd36e24739a92b8cabbb2/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so"
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/e7a76f3a87b224cb22245a21d91baee6/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.armeabi-v7a/libfbjni.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/jsi/libs/android.armeabi-v7a/libjsi.so",
+        "/Users/zluck/.gradle/caches/8.14.3/transforms/ee69aeef1e4e6e6a75a19b0a2fa98da4/transformed/react-android-0.81.4-debug/prefab/modules/reactnative/libs/android.armeabi-v7a/libreactnative.so"
       ]
     }
   },

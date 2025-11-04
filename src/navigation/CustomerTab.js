@@ -6,6 +6,7 @@ import HomeStack from './HomeStack';
 import CartStack from './CartStack';
 import SettingsStack from './SettingsStack';
 import CustomTabBar from '../components/customer/CustomTabBar';
+import Test from '../screens/customer/Test';
 
 const Tab = createBottomTabNavigator();
 
@@ -29,7 +30,8 @@ export default function CustomerTabs() {
         const params = route.params || {};
 
         // Check if current screen should hide tabs or if hideTabBar param is true
-        const shouldHide = HIDE_TAB_SCREENS.includes(routeName) || params.hideTabBar;
+        const shouldHide =
+          HIDE_TAB_SCREENS.includes(routeName) || params.hideTabBar;
 
         // Pass visible prop to CustomTabBar
         return <CustomTabBar {...props} visible={!shouldHide} />;
@@ -52,6 +54,13 @@ export default function CustomerTabs() {
       <Tab.Screen
         name="SettingStack"
         component={SettingsStack}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Tab.Screen
+        name="Test"
+        component={Test}
         options={{
           headerShown: false,
         }}
