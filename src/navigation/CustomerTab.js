@@ -6,7 +6,6 @@ import HomeStack from './HomeStack';
 import CartStack from './CartStack';
 import SettingsStack from './SettingsStack';
 import CustomTabBar from '../components/customer/CustomTabBar';
-import Test from '../screens/customer/Test';
 
 const Tab = createBottomTabNavigator();
 
@@ -54,13 +53,6 @@ export default function CustomerTabs() {
       <Tab.Screen
         name="SettingStack"
         component={SettingsStack}
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Tab.Screen
-        name="Test"
-        component={Test}
         options={{
           headerShown: false,
         }}

@@ -2,63 +2,211 @@
 import { supabase } from '../supabase/supabase';
 
 export class OrderService {
-  // Create order from cart items
+  // Replace your createOrder with this
+  // services/OrderService.js
   static async createOrder(cartItems, options = {}) {
-    const { coupon, discount = 0, deliveryAddressId } = options;
+    const {
+      coupon = null,
+      discount = 0,
+      deliveryAddressId,
+      deliveryCharge = 0,
+      totalAmount,
+      product_ids = [], // added for controlled cart clearing
+    } = options;
+
     try {
+      if (!Array.isArray(cartItems) || cartItems.length === 0) {
+        throw new Error('Cart is empty or invalid');
+      }
+
+      // 1️⃣ Auth check
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      // 2️⃣ Validate stock
       const stockValidation = await this.validateStock(cartItems);
-      if (!stockValidation.success) {
-        return stockValidation;
+      if (!stockValidation.success) return stockValidation;
+
+      // 3️⃣ Compute subtotal safely
+      const subtotal = cartItems.reduce((sum, item) => {
+        const price =
+          item.products?.price ?? item.unit_price ?? item.price ?? 0;
+        return sum + Number(price) * Number(item.quantity);
+      }, 0);
+
+      // 4️⃣ Validate coupon
+      let serverCoupon = null;
+      if (coupon && coupon.id) {
+        const { data: couponRow, error: couponErr } = await supabase
+          .from('coupons')
+          .select('*')
+          .eq('id', coupon.id)
+          .single();
+        if (!couponErr && couponRow && couponRow.is_active) {
+          serverCoupon = couponRow;
+        }
       }
 
+      let couponAmount = 0;
+      if (serverCoupon) {
+        const couponCategoryId = String(serverCoupon.category_id);
+        const matchingSubtotal = cartItems
+          .filter(it =>
+            (it.products?.product_categories || []).some(
+              pc => String(pc.category_id) === couponCategoryId,
+            ),
+          )
+          .reduce((s, it) => {
+            const price = it.products?.price ?? it.unit_price ?? it.price ?? 0;
+            return s + Number(price) * Number(it.quantity);
+          }, 0);
+
+        if (matchingSubtotal >= Number(serverCoupon.minimum_order_value)) {
+          couponAmount = Number(serverCoupon.discount_amount) || 0;
+        } else {
+          console.warn('[Coupon ignored - minimum not met]', {
+            couponId: serverCoupon.id,
+            matchingSubtotal,
+            min: serverCoupon.minimum_order_value,
+          });
+          serverCoupon = null;
+        }
+      }
+
+      // 5️⃣ Delivery and totals
+      const amountAfterDiscount = Math.max(0, subtotal - couponAmount);
+      const delivery_charge = await this.computeDeliveryCharge(
+        amountAfterDiscount,
+      );
+      const serverComputedTotal = Number(
+        (amountAfterDiscount + delivery_charge).toFixed(2),
+      );
+
+      if (
+        typeof totalAmount !== 'undefined' &&
+        totalAmount !== null &&
+        Math.abs(Number(totalAmount) - serverComputedTotal) > 0.01
+      ) {
+        throw new Error(
+          `Total mismatch: client ${totalAmount} != server ${serverComputedTotal}`,
+        );
+      }
+
+      const total_amount = serverComputedTotal;
+
+      // 6️⃣ Create order header
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert([
+          {
+            customer_id: user.id,
+            subtotal,
+            coupon_id: serverCoupon?.id || null,
+            coupon_amount: couponAmount,
+            delivery_charge,
+            total_amount,
+            delivery_address_id: deliveryAddressId,
+            status: 'pending',
+          },
+        ])
+        .select()
+        .single();
+      if (orderError) throw orderError;
+
+      const orderId = orderData.id;
+
+      // 7️⃣ Find item for max discount
+      let maxItem = null;
+      let maxSubtotal = 0;
+      for (const item of cartItems) {
+        const price =
+          item.products?.price ?? item.unit_price ?? item.price ?? 0;
+        const sub = Number(price) * Number(item.quantity);
+        if (sub > maxSubtotal) {
+          maxSubtotal = sub;
+          maxItem = item;
+        }
+      }
+
+      // 8️⃣ Build order items safely
       const orderItems = cartItems.map(item => {
-        const itemSubtotal = item.products.price * item.quantity;
-        const itemFinalPrice = Math.max(0, itemSubtotal - discount);
+        const unit_price = Number(
+          item.products?.price ?? item.unit_price ?? item.price ?? 0,
+        );
+        const quantity = Number(item.quantity);
+        const item_subtotal = unit_price * quantity;
+
+        const productId = item.products?.id ?? item.product_id;
+        const isDiscounted =
+          maxItem &&
+          (item.products?.id ?? item.product_id) ===
+            (maxItem.products?.id ?? maxItem.product_id);
+
+        const item_discount = isDiscounted
+          ? Math.min(couponAmount, item_subtotal)
+          : 0;
 
         return {
-          customer_id: user.id,
-          product_id: item.products.id,
-          quantity: item.quantity,
-          price: item.products.price,
-          status: 'Pending',
-          total_price: itemFinalPrice.toFixed(2),
-          coupon_id: coupon?.id || null,
-          coupon_discount: discount,
-          delivery_address_id: deliveryAddressId, // ✅ ADD THIS
-          delivery_charge: 0, // Default to 0, can be updated later
+          order_id: orderId,
+          product_id: productId,
+          unit_price,
+          quantity,
+          item_subtotal: Number(item_subtotal.toFixed(2)),
+          item_discount: Number(item_discount.toFixed(2)),
+          item_total: Number((item_subtotal - item_discount).toFixed(2)),
         };
       });
 
-      const { data, error } = await supabase
-        .from('orders')
+      const { data: insertedItems, error: itemsError } = await supabase
+        .from('order_items')
         .insert(orderItems)
         .select();
+      if (itemsError) throw itemsError;
 
-      if (error) throw error;
+      // 9️⃣ Verify total
+      const sumItemTotals = insertedItems.reduce(
+        (s, it) => s + Number(it.item_total || 0),
+        0,
+      );
+      if (Math.abs(sumItemTotals + delivery_charge - total_amount) > 0.01) {
+        throw new Error('Order total mismatch after insert');
+      }
 
-      await this.deductStock(cartItems);
-      await this.clearCart(user.id);
+      // 🔟 Deduct stock safely
+      const stockResult = await this.deductStock(cartItems);
+      if (!stockResult.success) throw new Error(stockResult.error);
 
-      return {
-        success: true,
-        data,
-        orderId: data[0]?.id,
-      };
+      // 11️⃣ Clear only selected products
+      if (product_ids?.length > 0) {
+        const clearRes = await this.clearCart(user.id, product_ids);
+        if (!clearRes.success)
+          console.warn('[Cart clear partial fail]', clearRes);
+      }
+
+      console.log('[Order Created OK]', {
+        orderId,
+        subtotal,
+        couponAmount,
+        delivery_charge,
+        total_amount,
+      });
+
+      return { success: true, orderId };
     } catch (error) {
       console.error('Error creating order:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message || String(error) };
     }
   }
 
-  // Validate stock availability
+  // ✅ Stock validation
+  // ✅ Stock validation (robust: supports both cartData and latestCart structures)
   static async validateStock(cartItems) {
     try {
-      const productIds = cartItems.map(item => item.products.id);
+      const productIds = cartItems.map(i =>
+        i.products ? i.products.id : i.product_id,
+      );
 
       const { data: products, error } = await supabase
         .from('products')
@@ -70,112 +218,113 @@ export class OrderService {
       const outOfStock = [];
       const insufficient = [];
 
-      cartItems.forEach(cartItem => {
-        const product = products.find(p => p.id === cartItem.products.id);
+      for (const item of cartItems) {
+        const productId = item.products ? item.products.id : item.product_id;
+        const quantity = item.quantity;
+        const product = products.find(p => p.id === productId);
+
         if (!product) {
-          outOfStock.push(cartItem.products.name);
-        } else if (product.quantity < cartItem.quantity) {
+          outOfStock.push(
+            item.products?.name || item.product_name || productId,
+          );
+        } else if (product.quantity < quantity) {
           insufficient.push({
             name: product.name,
             available: product.quantity,
-            requested: cartItem.quantity,
+            requested: quantity,
           });
         }
-      });
+      }
 
-      if (outOfStock.length > 0) {
+      if (outOfStock.length > 0)
         return {
           success: false,
           error: 'out_of_stock',
-          items: outOfStock,
           message: `Out of stock: ${outOfStock.join(', ')}`,
         };
-      }
 
-      if (insufficient.length > 0) {
+      if (insufficient.length > 0)
         return {
           success: false,
           error: 'insufficient_stock',
-          items: insufficient,
           message: `Insufficient stock for: ${insufficient
-            .map(
-              i =>
-                `${i.name} (${i.available} available, ${i.requested} requested)`,
-            )
+            .map(i => `${i.name}`)
             .join(', ')}`,
         };
-      }
 
       return { success: true };
-    } catch (error) {
-      console.error('Error validating stock:', error);
-      return { success: false, error: error.message };
+    } catch (err) {
+      console.error('Error validating stock:', err);
+      return { success: false, error: err.message };
     }
   }
 
-  // Deduct stock after order
+  // ✅ Deduct stock
   static async deductStock(cartItems) {
     try {
-      const updates = cartItems.map(async item => {
+      for (const item of cartItems) {
+        const productId = item.products?.id ?? item.product_id;
+        if (!productId) {
+          console.warn('[deductStock] Missing product_id', item);
+          continue;
+        }
         const { error } = await supabase.rpc('decrement_stock', {
-          product_id: item.products.id,
+          product_id: productId,
           quantity_to_deduct: item.quantity,
         });
         if (error) throw error;
-      });
-
-      await Promise.all(updates);
+      }
       return { success: true };
-    } catch (error) {
-      // Fallback to manual update
-      return await this._manualDeductStock(cartItems);
+    } catch (err) {
+      console.error('Error deducting stock:', err);
+      return { success: false, error: err.message };
     }
   }
 
-  // Manual stock deduction (fallback)
-  static async _manualDeductStock(cartItems) {
+  // ✅ Clear cart
+  // 🧱 Clear only selected cart rows
+  static async clearCart(userId, productIds = []) {
     try {
-      const updates = cartItems.map(async item => {
-        const { data: product } = await supabase
-          .from('products')
-          .select('quantity')
-          .eq('id', item.products.id)
-          .single();
+      let query = supabase.from('cart').delete().eq('customer_id', userId);
+      if (Array.isArray(productIds) && productIds.length > 0)
+        query = query.in('product_id', productIds);
 
-        if (product) {
-          const newQuantity = Math.max(0, product.quantity - item.quantity);
-          await supabase
-            .from('products')
-            .update({ quantity: newQuantity })
-            .eq('id', item.products.id);
-        }
-      });
-
-      await Promise.all(updates);
-      return { success: true };
-    } catch (error) {
-      console.error('Error deducting stock:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Clear cart after checkout
-  static async clearCart(userId) {
-    try {
-      const { error } = await supabase
-        .from('cart')
-        .delete()
-        .eq('customer_id', userId);
-
+      const { error } = await query;
       if (error) throw error;
       return { success: true };
-    } catch (error) {
-      console.error('Error clearing cart:', error);
-      return { success: false, error: error.message };
+    } catch (err) {
+      console.error('Error clearing cart:', err);
+      return { success: false, error: err.message };
     }
   }
 
-  // Get user orders
+  // ✅ Delivery charge rule - consistent with client logic
+  static async computeDeliveryCharge(amount) {
+    try {
+      const { data: rules, error } = await supabase
+        .from('delivery_charge_rules')
+        .select('*')
+        .order('min_order_value', { ascending: true });
+
+      if (error || !rules?.length) return 0;
+
+      let charge = 0;
+      for (const rule of rules) {
+        const min = Number(rule.min_order_value || 0);
+        const max = Number(rule.max_order_value || Infinity);
+        if (amount >= min && amount <= max) {
+          charge = Number(rule.delivery_charge || 0);
+          break;
+        }
+      }
+      return charge;
+    } catch (err) {
+      console.error('[computeDeliveryCharge] failed:', err);
+      return 0;
+    }
+  }
+
+  // ✅ Fetch orders with items
   static async getUserOrders() {
     try {
       const {
@@ -188,25 +337,23 @@ export class OrderService {
         .select(
           `
           id,
-          quantity,
-          price,
           status,
+          subtotal,
+          coupon_amount,
+          delivery_charge,
+          total_amount,
           created_at,
-          products (
+          order_items (
             id,
-            name,
-            description,
-            product_categories (
-              category_id,
-              category:category_id (
-                id,
-                name
-              )
-            ),
-            product_images (
+            quantity,
+            unit_price,
+            item_discount,
+            item_total,
+            products (
               id,
-              image_url,
-              display_order
+              name,
+              description,
+              product_images (image_url)
             )
           )
         `,
@@ -216,9 +363,9 @@ export class OrderService {
 
       if (error) throw error;
       return { success: true, data };
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      return { success: false, error: error.message };
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+      return { success: false, error: err.message };
     }
   }
 }

@@ -19,6 +19,11 @@ export default function CartStack() {
               title="My Shopping Cart"
               canGoBack={false}
               screenName="Cart"
+              selectMode={route?.params?.selectMode}
+              onToggleSelectMode={() => {
+                const current = route?.params?.selectMode ?? false;
+                navigation.setParams({ selectMode: !current });
+              }}
             />
           ),
         })}

@@ -14,17 +14,17 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        configurations.all{
-          resolutionStrategy{
-            force "com.google.android.gms:play-services-location:21.0.1"
-          }
-        }
+        // configurations.all{
+        //   resolutionStrategy{
+        //     force "com.google.android.gms:play-services-location:21.0.1"
+        //   }
+        // }
     }
     dependencies {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
-        classpath('com.google.gms:google-services:4.4.2')
+        // classpath('com.google.gms:google-services:4.4.2')
     }
 }
 

@@ -260,7 +260,6 @@ const styles = StyleSheet.create({
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,

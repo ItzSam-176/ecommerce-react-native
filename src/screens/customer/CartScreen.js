@@ -18,6 +18,7 @@ import {
   Image,
   Keyboard,
   Modal,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -34,7 +35,9 @@ import { useCoupon } from '../../hooks/useCoupon';
 import CouponBottomSheet from '../../components/customer/CouponBottomSheet';
 import { useAuth } from '../../navigation/AuthProvider';
 import { supabase } from '../../supabase/supabase';
-export default function CartScreen({ navigation }) {
+import { useDeliveryCharge } from '../../hooks/useDeliveryCharge';
+
+export default function CartScreen({ navigation, route }) {
   const { showAlert, showConfirm } = useAlert();
   const { showToast } = useToastify();
   const { user } = useAuth();
@@ -46,17 +49,23 @@ export default function CartScreen({ navigation }) {
   const [placingOrder, setPlacingOrder] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
 
-
   const [couponSheetVisible, setCouponSheetVisible] = useState(false);
   const couponRef = useRef(null);
 
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [addresses, setAddresses] = useState([]);
 
+  // selectMode is driven by header via route.params.selectMode
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState(new Set());
+
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode(prev => !prev);
+  }, []);
+
   const { cartData, setCartData, removeFromCart, updateCartQuantity, getCart } =
     useCart([], null, navigation);
 
-  // ✅ Use coupon hook
   const {
     allCoupons,
     selectedCoupon,
@@ -70,8 +79,11 @@ export default function CartScreen({ navigation }) {
     checkUsedCoupons,
   } = useCoupon();
 
+  const { calculateDeliveryCharge, getFreeShippingThreshold } =
+    useDeliveryCharge();
+
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && checkUsedCoupons) {
       checkUsedCoupons(user.id);
     }
   }, [user?.id, checkUsedCoupons]);
@@ -83,9 +95,33 @@ export default function CartScreen({ navigation }) {
   }, [user?.id]);
 
   useEffect(() => {
-    console.log('Selected Coupon Updated:', selectedCoupon);
+    const routeSelectMode = Boolean(route?.params?.selectMode);
+    setSelectMode(routeSelectMode);
+
+    if (routeSelectMode) {
+      setSelectedProductIds(new Set(cartData.map(i => i.products.id)));
+    } else {
+      setSelectedProductIds(new Set());
+    }
+  }, [route?.params?.selectMode, cartData]);
+
+  useEffect(() => {
     couponRef.current = selectedCoupon;
   }, [selectedCoupon]);
+
+  // Sync selectMode with route params (header will toggle route.params.selectMode)
+  useEffect(() => {
+    const routeSelectMode = Boolean(route?.params?.selectMode);
+    setSelectMode(routeSelectMode);
+
+    if (routeSelectMode) {
+      // preselect all product ids when entering select mode
+      setSelectedProductIds(new Set(cartData.map(i => i.products.id)));
+    } else {
+      // clear selection when leaving select mode
+      setSelectedProductIds(new Set());
+    }
+  }, [route?.params?.selectMode, cartData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,12 +141,10 @@ export default function CartScreen({ navigation }) {
     }, [initialLoading, getCart]),
   );
 
-  // ✅ Fetch coupons on mount
   useEffect(() => {
     fetchAllCoupons();
   }, [fetchAllCoupons]);
 
-  // ✅ Filter applicable when cart changes
   useEffect(() => {
     filterApplicableCoupons(cartData);
   }, [cartData, filterApplicableCoupons]);
@@ -131,19 +165,65 @@ export default function CartScreen({ navigation }) {
     };
   }, []);
 
+  // SUMMARY: compute totals either for whole cart or for selected subset.
+  // Coupon is applied in a strict category-based way: the coupon's category must appear
+  // in the chosen rows for the discount to apply.
   const summaryData = useMemo(() => {
-    const subtotal = cartData.reduce(
-      (t, i) => t + i.products.price * i.quantity,
+    const rows =
+      selectMode && selectedProductIds.size > 0
+        ? cartData.filter(i => selectedProductIds.has(i.products.id))
+        : cartData;
+
+    const subtotal = rows.reduce(
+      (t, i) => t + Number(i.products.price) * Number(i.quantity),
       0,
     );
-    const total = calculateTotal(subtotal);
+
+    // Strict category-based coupon handling (works only if product_categories exist on product objects)
+    let discount = 0;
+    const couponObj = couponRef.current?.coupon || null;
+    if (couponObj && couponObj.discount_amount) {
+      const couponCategoryId = couponObj.category_id;
+      if (!couponCategoryId) {
+        // global coupon fallback
+        discount = Number(couponObj.discount_amount) || 0;
+      } else {
+        // check if any of the rows contains the coupon category
+        const matches = rows.some(
+          row =>
+            Array.isArray(row.products.product_categories) &&
+            row.products.product_categories.some(
+              pc => pc.category_id === couponCategoryId,
+            ),
+        );
+        if (matches) discount = Number(couponObj.discount_amount) || 0;
+        else discount = 0;
+      }
+    }
+
+    // If product_categories are missing on products in cartData, we treat that as no-match (strict)
+    const amountForDelivery = Math.max(0, subtotal - discount);
+    const deliveryFee = calculateDeliveryCharge(amountForDelivery);
+    const total = amountForDelivery + deliveryFee;
 
     return {
       subtotal: subtotal.toFixed(2),
-      discount: couponDiscount.toFixed(2),
+      discount: discount.toFixed(2),
+      amountForDelivery: amountForDelivery.toFixed(2),
+      deliveryFee: deliveryFee.toFixed(2),
       total: total.toFixed(2),
     };
-  }, [cartData, couponDiscount, calculateTotal]);
+  }, [
+    cartData,
+    couponDiscount,
+    calculateDeliveryCharge,
+    selectMode,
+    selectedProductIds,
+  ]);
+
+  const freeShippingRemaining = summaryData?.amountForDelivery
+    ? getFreeShippingThreshold(parseFloat(summaryData.amountForDelivery))
+    : null;
 
   const maxSavings = useMemo(() => {
     const applicableCoupon = allCoupons.find(
@@ -177,7 +257,6 @@ export default function CartScreen({ navigation }) {
       if (error) throw error;
       setAddresses(data || []);
 
-      // Auto-select default address
       const defaultAddr = data?.find(a => a.is_default);
       if (defaultAddr) setSelectedAddress(defaultAddr);
     } catch (error) {
@@ -309,77 +388,305 @@ export default function CartScreen({ navigation }) {
       { confirmText: 'Remove', destructive: true },
     );
   };
-  // Update handleCheckout to require address
+
+  const toggleSelectProduct = useCallback(productId => {
+    setSelectedProductIds(prev => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  }, []);
+
+  const isProductSelected = useCallback(
+    productId => selectedProductIds.has(productId),
+    [selectedProductIds],
+  );
+
+  // place order (accepts array of product ids to checkout)
+  // Replace your placeOrderConfirmed with this exact function
+  const placeOrderConfirmed = async (selectedIds = null) => {
+    setPlacingOrder(true);
+
+    try {
+      // Auth check
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData?.user;
+      if (!currentUser?.id) {
+        showAlert(
+          'Error',
+          'Authentication required. Please login again.',
+          'error',
+        );
+        setPlacingOrder(false);
+        return;
+      }
+
+      // 1) Fetch the user's cart rows from DB (fresh)
+      const { data: cartRows, error: cartErr } = await supabase
+        .from('cart')
+        .select('id, quantity, product_id')
+        .eq('customer_id', currentUser.id);
+
+      if (cartErr) {
+        showAlert(
+          'Error',
+          `Failed to fetch cart data: ${cartErr.message}`,
+          'error',
+        );
+        setPlacingOrder(false);
+        return;
+      }
+
+      if (!cartRows || cartRows.length === 0) {
+        showAlert('Error', 'Your cart is empty', 'error');
+        setPlacingOrder(false);
+        return;
+      }
+
+      // 2) Determine which cart rows to process (selected subset or full)
+      const filteredCartRows =
+        Array.isArray(selectedIds) && selectedIds.length > 0
+          ? cartRows.filter(r => selectedIds.includes(r.product_id))
+          : cartRows;
+
+      if (filteredCartRows.length === 0) {
+        showAlert('Error', 'No selected items found in cart', 'error');
+        setPlacingOrder(false);
+        return;
+      }
+
+      // 3) Fetch product data and product_categories for those product_ids
+      const productIds = filteredCartRows.map(r => r.product_id);
+
+      const { data: products, error: prodErr } = await supabase
+        .from('products')
+        .select('id, name, price, quantity')
+        .in('id', productIds);
+
+      if (prodErr) {
+        showAlert(
+          'Error',
+          `Failed to fetch product data: ${prodErr.message}`,
+          'error',
+        );
+        setPlacingOrder(false);
+        return;
+      }
+
+      const { data: categories, error: catErr } = await supabase
+        .from('product_categories')
+        .select('product_id, category_id')
+        .in('product_id', productIds);
+
+      if (catErr) {
+        showAlert(
+          'Error',
+          `Failed to fetch product categories: ${catErr.message}`,
+          'error',
+        );
+        setPlacingOrder(false);
+        return;
+      }
+
+      // 4) Build maps
+      const categoryMap = new Map();
+      categories?.forEach(c => {
+        if (!categoryMap.has(c.product_id)) categoryMap.set(c.product_id, []);
+        categoryMap.get(c.product_id).push({ category_id: c.category_id });
+      });
+
+      const productMap = new Map();
+      products?.forEach(p => {
+        productMap.set(p.id, {
+          id: p.id,
+          name: p.name,
+          price: Number(p.price) || 0,
+          quantity: Number(p.quantity) || 0,
+          product_categories: categoryMap.get(p.id) || [],
+        });
+      });
+
+      // 5) Build latestCart (only selected rows), and compute an itemized payload
+      const latestCart = filteredCartRows.map(row => {
+        const product = productMap.get(row.product_id);
+        if (!product) {
+          throw new Error(`Product not found for cart row: ${row.id}`);
+        }
+        return {
+          cart_row_id: row.id, // DB cart row id (useful for deletion)
+          product_id: product.id,
+          quantity: Number(row.quantity),
+          unit_price: Number(product.price),
+          product_name: product.name,
+          product_categories: product.product_categories,
+          item_subtotal: Number(product.price) * Number(row.quantity),
+        };
+      });
+
+      // 6) Re-validate stock on server-side (important)
+      const stockValidation = await OrderService.validateStock(latestCart);
+      if (!stockValidation.success) {
+        showAlert('Stock Issues Detected', stockValidation.message, 'error');
+        setPlacingOrder(false);
+        return;
+      }
+
+      // 7) Coupon logic (strict category-based - same as UI summary)
+      const couponObj = couponRef.current?.coupon || null;
+      let discountAmount = 0;
+      if (couponObj && couponObj.discount_amount) {
+        const couponCategoryId = couponObj.category_id;
+        if (!couponCategoryId) {
+          discountAmount = Number(couponObj.discount_amount) || 0;
+        } else {
+          const matches = latestCart.some(item =>
+            (item.product_categories || []).some(
+              pc => pc.category_id === couponCategoryId,
+            ),
+          );
+          discountAmount = matches ? Number(couponObj.discount_amount) || 0 : 0;
+        }
+      }
+
+      // 8) Compute totals from latestCart (selected items only)
+      const subtotal = latestCart.reduce((s, it) => s + it.item_subtotal, 0);
+      // If you have per-item discounts, compute them here instead of a flat coupon_amount
+      const amountAfterDiscount = Math.max(0, subtotal - discountAmount);
+      const deliveryCharge = calculateDeliveryCharge(amountAfterDiscount);
+      const totalAmount = Number(
+        (amountAfterDiscount + deliveryCharge).toFixed(2),
+      );
+
+      // 9) Build robust payload to send to OrderService (send line items and totals and product ids to remove)
+      const lineItemsForServer = latestCart.map(it => ({
+        products: {
+          id: it.product_id,
+          name: it.product_name,
+          price: it.unit_price,
+          product_categories: it.product_categories,
+        },
+        quantity: it.quantity,
+      }));
+
+      // IMPORTANT: pass cart_row_ids or product_ids so backend knows which cart rows to delete
+      const productIdsToRemove = latestCart.map(it => it.product_id);
+      const cartRowIdsToRemove = latestCart.map(it => it.cart_row_id);
+
+      const createOrderPayload = {
+        line_items: lineItemsForServer,
+        subtotal,
+        discount: discountAmount,
+        delivery_charge: deliveryCharge,
+        total_amount: totalAmount,
+        coupon_id: couponObj?.id || null,
+        delivery_address_id: selectedAddress?.id || null,
+        meta: {
+          created_by_client_at: new Date().toISOString(),
+        },
+        // explicit: tell backend which cart rows to delete/mark-ordered
+        cart_row_ids: cartRowIdsToRemove,
+        product_ids: productIdsToRemove,
+      };
+
+      // 10) Call OrderService.createOrder with exact totals and the cart rows to remove
+      const result = await OrderService.createOrder(
+        lineItemsForServer,
+        createOrderPayload,
+      );
+
+      // 11) On success: record coupon usage, remove only selected cart rows (DB + local)
+      if (result.success) {
+        await recordCouponUsageFromOrder(result.orderId);
+
+        // 11a) Attempt to remove only the checked cart rows from DB (safety)
+        try {
+          // Use cart_row_ids when available — safer
+          if (cartRowIdsToRemove && cartRowIdsToRemove.length > 0) {
+            const { error: delErr } = await supabase
+              .from('cart')
+              .delete()
+              .in('id', cartRowIdsToRemove)
+              .eq('customer_id', currentUser.id);
+
+            if (delErr) {
+              console.warn(
+                '[Cart deletion warning] failed to delete selected cart rows:',
+                delErr,
+              );
+              // Don't throw — we still update local state below
+            }
+          } else if (productIdsToRemove && productIdsToRemove.length > 0) {
+            const { error: delErr } = await supabase
+              .from('cart')
+              .delete()
+              .in('product_id', productIdsToRemove)
+              .eq('customer_id', currentUser.id);
+
+            if (delErr) {
+              console.warn(
+                '[Cart deletion warning] failed to delete selected product cart rows:',
+                delErr,
+              );
+            }
+          }
+        } catch (err) {
+          console.error('[Cart deletion exception]', err);
+        }
+
+        // 11b) Update local cart state to remove only the selected products
+        setCartData(prev =>
+          prev.filter(i => !productIdsToRemove.includes(i.products.id)),
+        );
+
+        // 11c) Refresh backend cart snapshot
+        await getCart();
+
+        // 11d) Clear coupon selection + update used coupons
+        removeCoupon && removeCoupon();
+        if (user?.id) checkUsedCoupons && checkUsedCoupons(user.id);
+
+        showToast('Order placed successfully!', '', 'success');
+      } else {
+        console.error('[placeOrderConfirmed] createOrder failed', result);
+        showAlert('Error', result.error || 'Failed to place order', 'error');
+      }
+    } catch (err) {
+      console.error('[placeOrderConfirmed] exception', err);
+      showAlert('Error', err.message || 'Failed to place order', 'error');
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
+
   const handleCheckout = async () => {
     if (!selectedAddress) {
       showAlert('Error', 'Please select a delivery address', 'error');
       return;
     }
 
-    console.log('Coupon from Ref:', couponRef.current);
-    const couponToUse = couponRef.current;
-    const discountAmount = couponToUse?.coupon.discount_amount || 0;
+    const rowsToCheckout =
+      selectMode && selectedProductIds.size > 0
+        ? cartData.filter(i => selectedProductIds.has(i.products.id))
+        : cartData;
 
-    const cartSubtotal = cartData.reduce(
-      (t, i) => t + i.products.price * i.quantity,
-      0,
-    );
-    const finalTotal = Math.max(0, cartSubtotal - discountAmount);
-    const formattedTotal = formatCurrency(finalTotal.toFixed(2));
-
-    if (cartData.length === 0) {
-      showAlert('Error', 'Your cart is empty', 'error');
+    if (!rowsToCheckout || rowsToCheckout.length === 0) {
+      showAlert('Error', 'No items selected for checkout', 'error');
       return;
     }
 
-    setPlacingOrder(true);
-    const stockValidation = await OrderService.validateStock(cartData);
-
+    const stockValidation = await OrderService.validateStock(rowsToCheckout);
     if (!stockValidation.success) {
-      setPlacingOrder(false);
       showAlert('Stock Issues Detected', stockValidation.message, 'error');
       return;
     }
 
-    setPlacingOrder(false);
-
     showConfirm(
       'Confirm Order',
-      `Place order for ${formattedTotal}?\nDelivering to: ${selectedAddress.label}`,
+      `Delivering to: ${selectedAddress.label}`,
       async () => {
-        setPlacingOrder(true);
-
-        try {
-          const result = await OrderService.createOrder(cartData, {
-            coupon: couponToUse?.coupon,
-            discount: discountAmount,
-            deliveryAddressId: selectedAddress.id,
-          });
-
-          if (result.success) {
-            await recordCouponUsageFromOrder(result.orderId);
-
-            setCartData([]);
-            getCart();
-            removeCoupon();
-            if (user?.id) {
-              await checkUsedCoupons(user.id);
-            }
-            setPlacingOrder(false);
-            showToast('Order placed successfully!', '', 'success');
-          } else {
-            setPlacingOrder(false);
-            showAlert(
-              'Error',
-              result.error || 'Failed to place order',
-              'error',
-            );
-          }
-        } catch (error) {
-          setPlacingOrder(false);
-          console.error('Checkout error:', error);
-          showAlert('Error', 'Failed to place order', 'error');
-        }
+        const selectedIds = rowsToCheckout.map(r => r.products.id);
+        await placeOrderConfirmed(selectedIds);
       },
       {
         confirmText: 'Place Order',
@@ -390,24 +697,14 @@ export default function CartScreen({ navigation }) {
 
   const recordCouponUsageFromOrder = async orderId => {
     try {
-      if (!orderId) {
-        console.log('No order ID provided');
-        return;
-      }
-
+      if (!orderId) return;
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select('coupon_id')
         .eq('id', orderId)
         .single();
 
-      console.log('recordCouponUsageFromOrder', orderData);
-      console.log('Order Error recordCouponUsageFromOrder', orderError);
-
-      if (orderError || !orderData?.coupon_id) {
-        console.log('No coupon in this order');
-        return;
-      }
+      if (orderError || !orderData?.coupon_id) return;
 
       const { error } = await supabase.from('coupon_usage').insert([
         {
@@ -418,23 +715,43 @@ export default function CartScreen({ navigation }) {
         },
       ]);
 
-      if (error) {
-        console.error('[Coupon usage recording error]:', error);
-      } else {
-        console.log('[Coupon usage recorded successfully]');
-      }
+      if (error) console.error('[Coupon usage recording error]:', error);
     } catch (err) {
       console.error('[Coupon usage recording exception]:', err);
     }
   };
 
   const renderCartItem = ({ item }) => {
-    const productImage = getProductPrimaryImage(item.products); // ✅ ADD THIS
+    const productImage = getProductPrimaryImage(item.products);
+    const selected = isProductSelected(item.products.id);
 
     return (
-      <View style={styles.cartItem}>
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => {
+          if (selectMode) toggleSelectProduct(item.products.id);
+        }}
+        style={[
+          styles.cartItem,
+          selectMode && selected && { borderColor: '#4fc3f7', borderWidth: 2 },
+        ]}
+      >
+        {selectMode && (
+          <TouchableOpacity
+            onPress={() => toggleSelectProduct(item.products.id)}
+            activeOpacity={0.7}
+            style={styles.checkboxWrapper}
+          >
+            <Ionicons
+              name={selected ? 'checkbox-outline' : 'square-outline'}
+              size={24}
+              color={selected ? '#4fc3f7' : '#8a9fb5'}
+            />
+          </TouchableOpacity>
+        )}
+
         <View style={styles.productImageContainer}>
-          {productImage ? ( // ✅ CHANGE THIS
+          {productImage ? (
             <Image
               source={{ uri: productImage }}
               style={styles.productImage}
@@ -509,7 +826,7 @@ export default function CartScreen({ navigation }) {
             </View>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -558,6 +875,7 @@ export default function CartScreen({ navigation }) {
         resizeMode="cover"
       >
         <StatusBar barStyle="light-content" backgroundColor="#353F54" />
+        {/* header handles checkbox/select toggle — no header UI here */}
 
         <FlatList
           data={cartData}
@@ -582,8 +900,6 @@ export default function CartScreen({ navigation }) {
             scrollEnabled={false}
             nestedScrollEnabled={true}
           >
-            {/* DELIVERY ADDRESS SECTION */}
-            {/* DELIVERY ADDRESS SECTION - COMPACT */}
             <View style={styles.addressSelectionSection}>
               <View style={styles.addressSectionHeader}>
                 <Text style={styles.addressSectionTitle}>Delivery Address</Text>
@@ -637,7 +953,6 @@ export default function CartScreen({ navigation }) {
               )}
             </View>
 
-            {/* ADDRESS SELECTION MODAL */}
             <Modal
               visible={showAddressModal}
               transparent
@@ -722,7 +1037,6 @@ export default function CartScreen({ navigation }) {
               </View>
             </Modal>
 
-            {/* COUPON SECTION */}
             <View style={styles.couponSection}>
               <View style={styles.couponHeader}>
                 <Text style={styles.couponLabel}>Apply Coupon</Text>
@@ -753,7 +1067,7 @@ export default function CartScreen({ navigation }) {
                         {selectedCoupon.coupon.code}
                       </Text>
                       <Text style={styles.selectedCouponSavings}>
-                        Save ₹{couponDiscount.toFixed(2)}
+                        Save ₹{Number(summaryData.discount).toFixed(2)}
                       </Text>
                     </View>
                   </View>
@@ -777,11 +1091,23 @@ export default function CartScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.freeShippingBanner}>
-              <Text style={styles.freeShippingText}>
-                Your bag qualifies for free shipping
-              </Text>
-            </View>
+            {Number(summaryData.deliveryFee) === 0 ? (
+              <View style={styles.freeShippingBanner}>
+                <Text style={styles.freeShippingText}>
+                  Your bag qualifies for free shipping
+                </Text>
+              </View>
+            ) : freeShippingRemaining ? (
+              <View style={styles.freeShippingBanner}>
+                <Text style={styles.freeShippingText}>
+                  Add ₹
+                  {freeShippingRemaining.toFixed(0) == 0
+                    ? 1
+                    : freeShippingRemaining.toFixed(0)}{' '}
+                  more to get free shipping
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.summarySection}>
               <View style={styles.summaryRow}>
@@ -791,14 +1117,16 @@ export default function CartScreen({ navigation }) {
 
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Delivery Fee:</Text>
-                <Text style={styles.summaryValue}>₹0</Text>
+                <Text style={styles.summaryValue}>
+                  ₹{summaryData.deliveryFee}
+                </Text>
               </View>
 
-              {couponDiscount > 0 && (
+              {Number(summaryData.discount) > 0 && (
                 <View style={[styles.summaryRow, styles.discountRow]}>
                   <Text style={styles.summaryLabel}>Coupon Discount:</Text>
                   <Text style={styles.discountValue}>
-                    -₹{couponDiscount.toFixed(2)}
+                    -₹{Number(summaryData.discount).toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -831,7 +1159,8 @@ export default function CartScreen({ navigation }) {
     </View>
   );
 }
-// COMPLETE STYLESHEET
+
+// STYLES — unchanged from your file
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -890,6 +1219,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(79, 195, 247, 0.2)',
   },
+  checkboxWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+
   productImageContainer: {
     width: 80,
     height: 80,
@@ -1339,42 +1674,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  radioButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#4fc3f7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  radioButtonSelected: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#4fc3f7',
-  },
-  modalAddressCardLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  defaultBadge: {
-    backgroundColor: '#4fc3f7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  defaultBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  modalAddressCardText: {
-    fontSize: 12,
-    color: '#8a9fb5',
-    marginBottom: 4,
   },
   addNewAddressButton: {
     flexDirection: 'row',

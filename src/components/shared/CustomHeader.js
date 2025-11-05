@@ -16,8 +16,10 @@ export default function CustomHeader({
   editLoading,
   onTogglePress,
   onSearchPress,
+  selectMode,
+  onToggleSelectMode,
 }) {
-    const isBottomSheetExpanded = route?.params?.isBottomSheetExpanded ?? false;
+  const isBottomSheetExpanded = route?.params?.isBottomSheetExpanded ?? false;
   return (
     <View style={styles.headerContainer}>
       <StatusBar
@@ -73,10 +75,7 @@ export default function CustomHeader({
                 onPress={() => navigation.navigate('WishlistScreen')}
                 iconName="heart-outline"
               />
-              <IconButton
-                onPress={onSearchPress}
-                iconName="search-outline"
-              />
+              <IconButton onPress={onSearchPress} iconName="search-outline" />
             </>
           )}
 
@@ -98,6 +97,15 @@ export default function CustomHeader({
               onPress={onTogglePress}
               iconName={isBottomSheetExpanded ? 'chevron-down' : 'chevron-up'}
               size={24}
+            />
+          )}
+          {/* ✅ Cart Screen — Select mode toggle */}
+          {screenName === 'Cart' && onToggleSelectMode && (
+            <IconButton
+              onPress={onToggleSelectMode}
+              iconName={
+                route?.params?.selectMode ? 'close' : 'checkbox-outline'
+              }
             />
           )}
         </View>

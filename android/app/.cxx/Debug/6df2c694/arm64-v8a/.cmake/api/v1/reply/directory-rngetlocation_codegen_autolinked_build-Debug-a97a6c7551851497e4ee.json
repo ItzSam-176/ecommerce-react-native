@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "rngetlocation_codegen_autolinked_build",
+		"source" : "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni"
+	}
+}

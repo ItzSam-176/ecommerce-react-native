@@ -87,6 +87,31 @@ if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   file(TOUCH_NOCREATE "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/arm64-v8a/CMakeFiles/cmake.verify_globs")
 endif()
 
+# react_codegen_SRCS at /Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/CMakeLists.txt:9 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/*.cpp")
+set(OLD_GLOB
+  "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/rngetlocation_codegen-generated.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/arm64-v8a/CMakeFiles/cmake.verify_globs")
+endif()
+
+# react_codegen_SRCS at /Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/CMakeLists.txt:9 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/react/renderer/components/rngetlocation_codegen/*.cpp")
+set(OLD_GLOB
+  "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/react/renderer/components/rngetlocation_codegen/ComponentDescriptors.cpp"
+  "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/react/renderer/components/rngetlocation_codegen/EventEmitters.cpp"
+  "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/react/renderer/components/rngetlocation_codegen/Props.cpp"
+  "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/react/renderer/components/rngetlocation_codegen/ShadowNodes.cpp"
+  "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/react/renderer/components/rngetlocation_codegen/States.cpp"
+  "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-get-location/android/build/generated/source/codegen/jni/react/renderer/components/rngetlocation_codegen/rngetlocation_codegenJSI-generated.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "/Users/zluck/Sites/Projects/SupaBaseDemo/android/app/.cxx/Debug/6df2c694/arm64-v8a/CMakeFiles/cmake.verify_globs")
+endif()
+
 # react_codegen_SRCS at /Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-haptic-feedback/android/build/generated/source/codegen/jni/CMakeLists.txt:9 (file)
 file(GLOB NEW_GLOB LIST_DIRECTORIES true "/Users/zluck/Sites/Projects/SupaBaseDemo/node_modules/react-native-haptic-feedback/android/build/generated/source/codegen/jni/*.cpp")
 set(OLD_GLOB

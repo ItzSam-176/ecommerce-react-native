@@ -1,7 +1,6 @@
-// src/hooks/useLocation.js
 import { useState, useCallback } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
-import Geolocation from 'react-native-geolocation-service';
+import { PermissionsAndroid, Platform, Alert } from 'react-native';
+import GetLocation from 'react-native-get-location';
 import { LOCATION_CONFIG } from '../config/locationConfig';
 
 export const useLocation = () => {
@@ -12,30 +11,29 @@ export const useLocation = () => {
     message: '',
   });
 
+  // -------------------------------
+  // FETCH ADDRESS FROM COORDINATES
+  // -------------------------------
   const fetchAddressFromCoordinates = useCallback(
     async (latitude, longitude) => {
       try {
         const nominatimResponse = await fetch(
           `${LOCATION_CONFIG.NOMINATIM_URL}?format=json&lat=${latitude}&lon=${longitude}`,
           {
-            headers: {
-              'User-Agent': 'MyEcommerce/1.0',
-            },
+            headers: { 'User-Agent': 'MyEcommerce/1.0' },
           },
         );
 
         if (nominatimResponse.ok) {
           const data = await nominatimResponse.json();
-          const address = data.address;
-
-          console.log('[DEBUG] Nominatim address components:', address);
-
+          const address = data.address || {};
           return {
             success: true,
             data: {
               address:
                 `${address.house_number || ''} ${address.road || ''}`.trim() ||
-                data.display_name.split(',')[0],
+                data.display_name?.split(',')[0] ||
+                'Unknown',
               city: address.state_district || '',
               state: address.state || '',
               zip_code: address.postcode || '',
@@ -44,12 +42,10 @@ export const useLocation = () => {
               longitude: parseFloat(longitude),
             },
           };
-        } else {
-          throw new Error('Nominatim failed');
         }
+        throw new Error('Nominatim failed');
       } catch (nominatimError) {
         console.log('[INFO] Nominatim failed, trying LocationIQ...');
-
         try {
           const locationiqResponse = await fetch(
             `${LOCATION_CONFIG.LOCATIONIQ_URL}?key=${LOCATION_CONFIG.LOCATIONIQ_KEY}&lat=${latitude}&lon=${longitude}&format=json`,
@@ -57,13 +53,11 @@ export const useLocation = () => {
 
           if (locationiqResponse.ok) {
             const data = await locationiqResponse.json();
-            const address = data.address;
-            console.log('[DEBUG] LocationIQ address components:', address);
-
+            const address = data.address || {};
             return {
               success: true,
               data: {
-                address: data.display_name.split(',')[0],
+                address: data.display_name?.split(',')[0] || 'Unknown',
                 city: address.state_district || '',
                 state: address.state || '',
                 zip_code: address.postcode || '',
@@ -72,9 +66,8 @@ export const useLocation = () => {
                 longitude: parseFloat(longitude),
               },
             };
-          } else {
-            throw new Error('LocationIQ failed');
           }
+          throw new Error('LocationIQ failed');
         } catch (locationiqError) {
           console.error('[ERROR] Both APIs failed:', locationiqError);
           return {
@@ -87,80 +80,71 @@ export const useLocation = () => {
     [],
   );
 
-  // ✅ PERMISSION REQUEST FUNCTION
+  // -------------------------------
+  // PERMISSION HANDLER
+  // -------------------------------
   const requestLocationPermission = useCallback(async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const hasPermission = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        );
+    if (Platform.OS !== 'android') return true;
 
-        if (!hasPermission) {
-          const result = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-            {
-              title: 'Location Permission',
-              message: 'We need your location to auto-fill your address',
-              buttonPositive: 'Allow',
-              buttonNegative: 'Cancel',
-              buttonNeutral: 'Ask Later',
-            },
-          );
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Location Permission',
+          message: 'We need your location to auto-fill your address',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Cancel',
+        },
+      );
 
-          if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-            setPermissionAlert({
-              visible: true,
-              title: 'Permission Denied',
-              message:
-                'Location permission is required. Please enable it in settings.',
-              type: 'permission_denied',
-            });
-            return false;
-          }
-        }
-      } catch (error) {
-        console.error('[ERROR] Permission request error:', error);
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
         setPermissionAlert({
           visible: true,
-          title: 'Error',
-          message: 'Failed to request location permission.',
-          type: 'permission_error',
+          title: 'Permission Denied',
+          message:
+            'Location permission is required. Please enable it in settings.',
         });
         return false;
       }
+      return true;
+    } catch (error) {
+      console.error('[ERROR] Permission request error:', error);
+      setPermissionAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to request location permission.',
+      });
+      return false;
     }
-    return true;
   }, []);
 
-  // ✅ GET COORDINATES FUNCTION (THIS WAS MISSING!)
-  const getLocationCoordinates = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(
-        position => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        error => {
-          console.error('[ERROR] Geolocation error:', error);
-          reject({
-            success: false,
-            error:
-              'Could not get your location. Please enable location services.',
-          });
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 10000,
-        },
-      );
-    });
+  // -------------------------------
+  // GET COORDINATES USING get-location
+  // -------------------------------
+  const getLocationCoordinates = useCallback(async () => {
+    try {
+      const position = await GetLocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 10000,
+      });
+      return {
+        latitude: position.latitude,
+        longitude: position.longitude,
+      };
+    } catch (error) {
+      console.error('[ERROR] getLocationCoordinates failed:', error);
+      throw {
+        success: false,
+        error:
+          error?.message ||
+          'Unable to get your location. Please enable location services.',
+      };
+    }
   }, []);
 
-  // ✅ MAIN FUNCTION
-  // src/hooks/useLocation.js - FIX THE ERROR HANDLING
+  // -------------------------------
+  // COMBINED LOCATION FETCH + ADDRESS RESOLVE
+  // -------------------------------
   const getCurrentLocation = useCallback(async () => {
     setLoading(true);
 
@@ -168,10 +152,7 @@ export const useLocation = () => {
       const hasPermission = await requestLocationPermission();
       if (!hasPermission) {
         setLoading(false);
-        return {
-          success: false,
-          error: 'Location permission denied',
-        };
+        return { success: false, error: 'Location permission denied' };
       }
 
       const coords = await getLocationCoordinates();
@@ -179,6 +160,7 @@ export const useLocation = () => {
         coords.latitude,
         coords.longitude,
       );
+
       setLoading(false);
       return result;
     } catch (error) {
@@ -186,7 +168,7 @@ export const useLocation = () => {
       setLoading(false);
       return {
         success: false,
-        error: error?.error || 'Failed to get location',
+        error: error?.error || 'Failed to get current location',
       };
     }
   }, [
@@ -195,6 +177,9 @@ export const useLocation = () => {
     fetchAddressFromCoordinates,
   ]);
 
+  // -------------------------------
+  // EXPORT
+  // -------------------------------
   return {
     loading,
     getCurrentLocation,
