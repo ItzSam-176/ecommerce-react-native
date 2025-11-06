@@ -60,7 +60,6 @@ export default function CustomHeader({
               />
             </>
           )}
-
           {screenName === 'OrdersScreen' && (
             <IconButton
               onPress={onCustomizePress}
@@ -68,7 +67,6 @@ export default function CustomHeader({
               imageSource={require('../../assets/four_squares.png')}
             />
           )}
-
           {screenName === 'Home' && (
             <>
               <IconButton
@@ -78,11 +76,9 @@ export default function CustomHeader({
               <IconButton onPress={onSearchPress} iconName="search-outline" />
             </>
           )}
-
           {screenName === 'UserScreen' && onLogout && (
             <IconButton onPress={onLogout} iconName="log-out-outline" />
           )}
-
           {screenName === 'UserDetailsScreen' && onEditPress && (
             <IconButton
               onPress={onEditPress}
@@ -90,7 +86,6 @@ export default function CustomHeader({
               size={22}
             />
           )}
-
           {/* Product Details Screen - Dynamic toggle button */}
           {screenName === 'ProductDetailsScreen' && onTogglePress && (
             <IconButton
@@ -100,7 +95,7 @@ export default function CustomHeader({
             />
           )}
           {/* ✅ Cart Screen — Select mode toggle */}
-          {screenName === 'Cart' && onToggleSelectMode && (
+          {/* {screenName === 'Cart' && onToggleSelectMode && (
             <IconButton
               onPress={onToggleSelectMode}
               iconName={
@@ -108,6 +103,7 @@ export default function CustomHeader({
               }
             />
           )}
+          */}
         </View>
       </View>
     </View>

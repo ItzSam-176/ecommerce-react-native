@@ -1,5 +1,7 @@
 // services/OrderService.js
 import { supabase } from '../supabase/supabase';
+import { EventBus } from './EventBus';
+import { CartService } from './CartService';
 
 export class OrderService {
   // Replace your createOrder with this
@@ -8,15 +10,23 @@ export class OrderService {
     const {
       coupon = null,
       discount = 0,
-      deliveryAddressId,
-      deliveryCharge = 0,
+      delivery_address_id: deliveryAddressId,
+      delivery_charge: deliveryCharge = 0,
       totalAmount,
-      product_ids = [], // added for controlled cart clearing
+      selectedItems = [], // array of selected cart item IDs
     } = options;
 
+    console.log('createOrder', cartItems, options);
+
+    // Filter cart items based on selection if provided
+    const itemsToOrder =
+      selectedItems.length > 0
+        ? cartItems.filter(item => selectedItems.includes(item.id))
+        : cartItems;
+
     try {
-      if (!Array.isArray(cartItems) || cartItems.length === 0) {
-        throw new Error('Cart is empty or invalid');
+      if (!Array.isArray(itemsToOrder) || itemsToOrder.length === 0) {
+        throw new Error('No items selected for order');
       }
 
       // 1️⃣ Auth check
@@ -26,11 +36,11 @@ export class OrderService {
       if (!user) throw new Error('User not authenticated');
 
       // 2️⃣ Validate stock
-      const stockValidation = await this.validateStock(cartItems);
+      const stockValidation = await this.validateStock(itemsToOrder);
       if (!stockValidation.success) return stockValidation;
 
       // 3️⃣ Compute subtotal safely
-      const subtotal = cartItems.reduce((sum, item) => {
+      const subtotal = itemsToOrder.reduce((sum, item) => {
         const price =
           item.products?.price ?? item.unit_price ?? item.price ?? 0;
         return sum + Number(price) * Number(item.quantity);
@@ -52,7 +62,7 @@ export class OrderService {
       let couponAmount = 0;
       if (serverCoupon) {
         const couponCategoryId = String(serverCoupon.category_id);
-        const matchingSubtotal = cartItems
+        const matchingSubtotal = itemsToOrder
           .filter(it =>
             (it.products?.product_categories || []).some(
               pc => String(pc.category_id) === couponCategoryId,
@@ -77,12 +87,19 @@ export class OrderService {
 
       // 5️⃣ Delivery and totals
       const amountAfterDiscount = Math.max(0, subtotal - couponAmount);
+      console.log(
+        '[createOrder] Computing delivery charge for amount:',
+        amountAfterDiscount,
+      );
       const delivery_charge = await this.computeDeliveryCharge(
         amountAfterDiscount,
       );
+      console.log('[createOrder] Computed delivery_charge:', delivery_charge);
+
       const serverComputedTotal = Number(
         (amountAfterDiscount + delivery_charge).toFixed(2),
       );
+      console.log('[createOrder] Server total:', serverComputedTotal);
 
       if (
         typeof totalAmount !== 'undefined' &&
@@ -92,6 +109,20 @@ export class OrderService {
         throw new Error(
           `Total mismatch: client ${totalAmount} != server ${serverComputedTotal}`,
         );
+      }
+
+      // In createOrder, BEFORE creating order:
+      if (deliveryAddressId) {
+        const { data: address, error: addrErr } = await supabase
+          .from('delivery_addresses')
+          .select('id')
+          .eq('id', deliveryAddressId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (addrErr || !address) {
+          throw new Error('Invalid or unauthorized delivery address');
+        }
       }
 
       const total_amount = serverComputedTotal;
@@ -105,7 +136,7 @@ export class OrderService {
             subtotal,
             coupon_id: serverCoupon?.id || null,
             coupon_amount: couponAmount,
-            delivery_charge,
+            delivery_charge: delivery_charge,
             total_amount,
             delivery_address_id: deliveryAddressId,
             status: 'pending',
@@ -116,6 +147,22 @@ export class OrderService {
       if (orderError) throw orderError;
 
       const orderId = orderData.id;
+
+      // 🆕 ADD THIS - Record coupon usage if coupon was applied
+      if (serverCoupon?.id) {
+        const usageResult = await this.recordCouponUsage(
+          orderId,
+          serverCoupon.id,
+          user.id,
+        );
+        if (!usageResult.success) {
+          console.warn(
+            '[OrderService] Failed to record coupon usage:',
+            usageResult.error,
+          );
+          // Don't fail the order, just log the warning
+        }
+      }
 
       // 7️⃣ Find item for max discount
       let maxItem = null;
@@ -175,23 +222,37 @@ export class OrderService {
       }
 
       // 🔟 Deduct stock safely
-      const stockResult = await this.deductStock(cartItems);
+      const stockResult = await this.deductStock(itemsToOrder);
       if (!stockResult.success) throw new Error(stockResult.error);
 
-      // 11️⃣ Clear only selected products
-      if (product_ids?.length > 0) {
-        const clearRes = await this.clearCart(user.id, product_ids);
-        if (!clearRes.success)
-          console.warn('[Cart clear partial fail]', clearRes);
-      }
+      // ✅ FIXED - Clear selected cart rows by cart.id
+      const cartRowIdsToRemove = itemsToOrder
+        .map(item => item.id) // cart row ID
+        .filter(Boolean);
 
-      console.log('[Order Created OK]', {
-        orderId,
-        subtotal,
-        couponAmount,
-        delivery_charge,
-        total_amount,
-      });
+      const productIdsForEvent = itemsToOrder
+        .map(item => item.products?.id || item.product_id)
+        .filter(Boolean);
+
+      if (cartRowIdsToRemove.length > 0) {
+        const clearResult = await CartService.removeByCartRowIds(
+          cartRowIdsToRemove,
+          user.id,
+        );
+
+        if (!clearResult.success) {
+          throw new Error('Failed to clear cart items after order');
+        }
+
+        // Emit event to notify cart updates
+        EventBus.emit('cart:changed', {
+          type: 'remove',
+          productIds: productIdsForEvent, // for UI updates
+          cartRowIds: cartRowIdsToRemove, // for precise tracking
+          userId: user.id,
+          source: 'order',
+        });
+      }
 
       return { success: true, orderId };
     } catch (error) {
@@ -285,13 +346,22 @@ export class OrderService {
   // 🧱 Clear only selected cart rows
   static async clearCart(userId, productIds = []) {
     try {
-      let query = supabase.from('cart').delete().eq('customer_id', userId);
-      if (Array.isArray(productIds) && productIds.length > 0)
+      if (!userId) throw new Error('User ID is required');
+
+      let query = supabase.from('cart').delete();
+
+      // Always filter by customer_id
+      query = query.eq('customer_id', userId);
+
+      // If specific product IDs are provided, only delete those
+      if (Array.isArray(productIds) && productIds.length > 0) {
         query = query.in('product_id', productIds);
+      }
 
       const { error } = await query;
       if (error) throw error;
-      return { success: true };
+
+      return { success: true, clearedIds: productIds };
     } catch (err) {
       console.error('Error clearing cart:', err);
       return { success: false, error: err.message };
@@ -301,22 +371,42 @@ export class OrderService {
   // ✅ Delivery charge rule - consistent with client logic
   static async computeDeliveryCharge(amount) {
     try {
+      console.log('[computeDeliveryCharge] Fetching rules for amount:', amount);
+
       const { data: rules, error } = await supabase
         .from('delivery_charge_rules')
         .select('*')
-        .order('min_order_value', { ascending: true });
+        .order('min_cart_value', { ascending: true });
 
-      if (error || !rules?.length) return 0;
+      console.log('[computeDeliveryCharge] Rules fetched:', {
+        rulesCount: rules?.length,
+        error: error?.message,
+      });
+
+      if (error || !rules?.length) {
+        console.warn('[computeDeliveryCharge] No rules found or error');
+        return 0;
+      }
 
       let charge = 0;
       for (const rule of rules) {
-        const min = Number(rule.min_order_value || 0);
-        const max = Number(rule.max_order_value || Infinity);
+        const min = Number(rule.min_cart_value || 0);
+        const max = Number(rule.max_cart_value || Infinity);
+        console.log('[computeDeliveryCharge] Checking rule:', {
+          min,
+          max,
+          charge: rule.charge_amount,
+          matches: amount >= min && amount <= max,
+        });
+
         if (amount >= min && amount <= max) {
-          charge = Number(rule.delivery_charge || 0);
+          charge = Number(rule.charge_amount || 0);
+          console.log('[computeDeliveryCharge] Rule matched! Charge:', charge);
           break;
         }
       }
+
+      console.log('[computeDeliveryCharge] Final charge:', charge);
       return charge;
     } catch (err) {
       console.error('[computeDeliveryCharge] failed:', err);
@@ -366,6 +456,41 @@ export class OrderService {
     } catch (err) {
       console.error('Error fetching orders:', err);
       return { success: false, error: err.message };
+    }
+  }
+
+  // Add this to OrderService class
+  static async recordCouponUsage(orderId, couponId, userId) {
+    try {
+      if (!orderId || !couponId || !userId) {
+        throw new Error('Missing required parameters for coupon usage');
+      }
+
+      const { data, error } = await supabase
+        .from('coupon_usage')
+        .insert([
+          {
+            order_id: orderId,
+            coupon_id: couponId,
+            customer_id: userId,
+            used_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      console.log('[OrderService] Coupon usage recorded', {
+        orderId,
+        couponId,
+        usageId: data.id,
+      });
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('[OrderService] Failed to record coupon usage:', error);
+      return { success: false, error: error.message };
     }
   }
 }

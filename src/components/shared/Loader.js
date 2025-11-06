@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)', // [Screen dims here]
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', // [Screen dims here]
   },
   loaderContainer: {
     position: 'absolute',

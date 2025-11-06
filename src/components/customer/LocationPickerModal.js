@@ -213,7 +213,10 @@ const LocationPickerModal = ({
 
           {gettingInitialLocation && (
             <View style={styles.loadingOverlay}>
-              <Loader size={120} speed={1} />
+              <Loader
+                size={120}
+                speed={1}
+              />
             </View>
           )}
         </View>

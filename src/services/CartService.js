@@ -11,7 +11,6 @@ export class CartService {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // ✅ CHECK STOCK BEFORE ADDING
       const { data: product, error: stockError } = await supabase
         .from('products')
         .select('quantity, name')
@@ -19,7 +18,6 @@ export class CartService {
         .single();
 
       if (stockError) throw stockError;
-
       if (!product || product.quantity <= 0) {
         return {
           success: false,
@@ -27,7 +25,6 @@ export class CartService {
           message: `${product?.name || 'This product'} is out of stock`,
         };
       }
-
       if (product.quantity < quantity) {
         return {
           success: false,
@@ -37,7 +34,6 @@ export class CartService {
         };
       }
 
-      // Try to insert, if exists, update quantity
       const { data, error } = await supabase.rpc('upsert_cart_item', {
         p_customer_id: user.id,
         p_product_id: productId,
@@ -50,7 +46,29 @@ export class CartService {
     }
   }
 
-  // Manual upsert (fallback)
+  // NEW: Toggle selection
+  static async toggleCartItemSelection(productId, isSelected) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('cart')
+        .update({ is_selected: isSelected })
+        .eq('customer_id', user.id)
+        .eq('product_id', productId)
+        .select();
+
+      if (error) throw error;
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error toggling selection:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   static async _manualUpsertCart(productId, quantity) {
     try {
       const {
@@ -58,7 +76,6 @@ export class CartService {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Check if item exists
       const { data: existing } = await supabase
         .from('cart')
         .select('id, quantity')
@@ -67,26 +84,23 @@ export class CartService {
         .single();
 
       if (existing) {
-        // Update existing
         const { data, error } = await supabase
           .from('cart')
           .update({ quantity: existing.quantity + quantity })
           .eq('id', existing.id)
           .select();
-
         if (error) throw error;
         return { success: true, data, action: 'updated' };
       } else {
-        // Insert new
         const { data, error } = await supabase
           .from('cart')
           .insert({
             customer_id: user.id,
             product_id: productId,
             quantity,
+            is_selected: true, // NEW: Default to selected
           })
           .select();
-
         if (error) throw error;
         return { success: true, data, action: 'inserted' };
       }
@@ -97,6 +111,7 @@ export class CartService {
   }
 
   // Update getUserCart to include stock info
+  // Update getUserCart to fetch is_selected
   static async getUserCart() {
     try {
       const {
@@ -110,6 +125,7 @@ export class CartService {
           `
           id,
           quantity,
+          is_selected,
           created_at,
           products (
             id,
@@ -167,15 +183,13 @@ export class CartService {
   // Add this method to your CartService class in cartService.js
 
   static async updateCartQuantity(productId, action = 'increment') {
-
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
       if (!user) throw new Error('User not authenticated');
 
-      // First, get the current quantity
+      // Fetch current cart quantity
       const { data: currentData, error: fetchError } = await supabase
         .from('cart')
         .select('quantity')
@@ -183,36 +197,42 @@ export class CartService {
         .eq('product_id', productId)
         .single();
 
-      if (fetchError) {
-        console.error(
-          '(CartService) Error fetching current quantity:',
-          fetchError,
-        );
-        throw fetchError;
-      }
-
-      if (!currentData) {
+      if (fetchError) throw fetchError;
+      if (!currentData)
         return { success: false, error: 'Item not found in cart' };
-      }
 
       const currentQuantity = currentData.quantity;
       let newQuantity;
 
-      // Calculate new quantity based on action
       if (action === 'increment') {
         newQuantity = currentQuantity + 1;
+
+        // ✅ ADD STOCK CHECK
+        const { data: product, error: stockErr } = await supabase
+          .from('products')
+          .select('quantity, name')
+          .eq('id', productId)
+          .single();
+
+        if (stockErr) throw stockErr;
+        if (product.quantity < newQuantity) {
+          return {
+            success: false,
+            error: 'insufficient_stock',
+            message: `Only ${product.quantity} available`,
+          };
+        }
       } else if (action === 'decrement') {
-        newQuantity = Math.max(1, currentQuantity - 1); // Don't go below 1
+        newQuantity = Math.max(1, currentQuantity - 1);
       } else {
-        throw new Error('Invalid action. Use "increment" or "decrement"');
+        throw new Error('Invalid action');
       }
 
-      // If decrementing would result in 0, remove the item instead
       if (action === 'decrement' && currentQuantity <= 1) {
         return await this.removeFromCart(productId);
       }
 
-      // Update the quantity
+      // Update quantity
       const { data: updateData, error: updateError } = await supabase
         .from('cart')
         .update({ quantity: newQuantity })
@@ -220,10 +240,7 @@ export class CartService {
         .eq('product_id', productId)
         .select('*');
 
-      if (updateError) {
-        console.error('(CartService) Error updating quantity:', updateError);
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
       return {
         success: true,
@@ -232,7 +249,7 @@ export class CartService {
         action: action === 'increment' ? 'incremented' : 'decremented',
       };
     } catch (error) {
-      console.error('(CartService) Error updating cart quantity:', error);
+      console.error('Error updating cart quantity:', error);
       return { success: false, error: error.message };
     }
   }
@@ -260,6 +277,28 @@ export class CartService {
       };
     } catch (error) {
       console.error('Error checking cart:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Add to CartService
+  static async removeByCartRowIds(cartRowIds, userId) {
+    try {
+      if (!userId) throw new Error('User ID required');
+      if (!cartRowIds || cartRowIds.length === 0) {
+        return { success: true, deletedCount: 0 };
+      }
+
+      const { error } = await supabase
+        .from('cart')
+        .delete()
+        .in('id', cartRowIds)
+        .eq('customer_id', userId);
+
+      if (error) throw error;
+      return { success: true, deletedCount: cartRowIds.length };
+    } catch (error) {
+      console.error('Error removing cart rows:', error);
       return { success: false, error: error.message };
     }
   }

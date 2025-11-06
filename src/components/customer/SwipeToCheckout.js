@@ -8,13 +8,21 @@ const SWIPE_THRESHOLD = 0.7;
 export default function SwipeToCheckout({
   onSwipeSuccess,
   disabled = false,
-  isProcessing = false, // Add new prop
+  isProcessing = false,
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const [containerWidth, setContainerWidth] = useState(0);
   const buttonSize = 56;
   const maxSwipeDistanceRef = useRef(0);
   const [maxSwipeDistance, setMaxSwipeDistance] = useState(0);
+
+  // INITIALIZE with empty panHandlers
+  const panResponderRef = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: () => false,
+    })
+  );
 
   useEffect(() => {
     if (containerWidth > buttonSize + 8) {
@@ -26,10 +34,27 @@ export default function SwipeToCheckout({
 
   const isDisabled = disabled || isProcessing;
 
-  const panResponderRef = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !isDisabled,
-      onMoveShouldSetPanResponder: () => !isDisabled,
+  useEffect(() => {
+    if (isDisabled) {
+      console.log('[SwipeToCheckout] Resetting slider - disabled');
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [isDisabled, translateX]);
+
+  useEffect(() => {
+    panResponderRef.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        console.log('[SwipeToCheckout] onStartShouldSetPanResponder', { isDisabled });
+        return !isDisabled;
+      },
+      onMoveShouldSetPanResponder: () => {
+        console.log('[SwipeToCheckout] onMoveShouldSetPanResponder', { isDisabled });
+        return !isDisabled;
+      },
       onPanResponderMove: (_, gestureState) => {
         if (isDisabled) return;
         const maxDist = maxSwipeDistanceRef.current;
@@ -42,7 +67,13 @@ export default function SwipeToCheckout({
         if (maxDist <= 0) return;
         const swipePercentage = gestureState.dx / maxDist;
 
-        if (swipePercentage >= SWIPE_THRESHOLD) {
+        console.log('[SwipeToCheckout] onPanResponderRelease', {
+          swipePercentage,
+          threshold: SWIPE_THRESHOLD,
+          success: swipePercentage >= SWIPE_THRESHOLD,
+        });
+
+        if (swipePercentage >= SWIPE_THRESHOLD && !isDisabled) {
           Animated.spring(translateX, {
             toValue: maxDist,
             useNativeDriver: false,
@@ -68,8 +99,8 @@ export default function SwipeToCheckout({
           }).start();
         }
       },
-    }),
-  );
+    });
+  }, [isDisabled, translateX, onSwipeSuccess]);
 
   const handleLayout = event => {
     const { width } = event.nativeEvent.layout;
@@ -85,10 +116,8 @@ export default function SwipeToCheckout({
         })
       : new Animated.Value(1);
 
-  // Get text based on state
   const getText = () => {
     if (isProcessing) return 'Processing...';
-    if (disabled) return 'Remove Unavailable Items';
     return 'Checkout';
   };
 
@@ -130,7 +159,6 @@ export default function SwipeToCheckout({
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   wrapper: {

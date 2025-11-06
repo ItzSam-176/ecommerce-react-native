@@ -141,6 +141,46 @@ export const useCoupon = () => {
     [couponDiscount],
   );
 
+  const validateCouponApplicability = useCallback((couponToValidate, items) => {
+    if (!couponToValidate) return false;
+
+    const couponObj = couponToValidate.coupon;
+    const couponCategoryId = couponObj?.category_id;
+    const minimumOrderValue = Number(couponObj?.minimum_order_value || 0);
+
+    // Calculate subtotal
+    const subtotal = items.reduce(
+      (t, i) => t + Number(i.products.price) * Number(i.quantity),
+      0,
+    );
+
+    console.log('[validateCouponApplicability]', {
+      couponCode: couponObj?.code,
+      subtotal,
+      minimumOrderValue,
+      meetsMinimum: subtotal >= minimumOrderValue,
+    });
+
+    // Check minimum order value
+    if (subtotal < minimumOrderValue) {
+      return false;
+    }
+
+    // If global coupon, applicable if items exist
+    if (!couponCategoryId) {
+      return items.length > 0;
+    }
+
+    // Check category match
+    return items.some(
+      item =>
+        Array.isArray(item.products.product_categories) &&
+        item.products.product_categories.some(
+          pc => pc.category_id === couponCategoryId,
+        ),
+    );
+  }, []);
+
   return {
     coupons,
     allCoupons,
@@ -155,5 +195,6 @@ export const useCoupon = () => {
     getCouponDetails,
     calculateTotal,
     checkUsedCoupons,
+    validateCouponApplicability,
   };
 };
