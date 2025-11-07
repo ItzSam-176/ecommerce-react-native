@@ -17,6 +17,7 @@ import {
   Platform,
   UIManager,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { Table, Row } from 'react-native-reanimated-table';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -26,8 +27,8 @@ import { useSort } from '../../hooks/useSort';
 import Loader from '../../components/shared/Loader';
 import ColumnSelectorModal from '../../components/admin/ColumnSelectorModal';
 import StatusBadge from '../../components/admin/StatusBadge';
+import ProductsMenu from '../../components/admin/ProductsMenu';
 
-// Enable LayoutAnimation for Android
 if (
   Platform.OS === 'android' &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -88,6 +89,7 @@ const getStatusConfig = status => {
 export default function OrdersScreen({ navigation, route }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [isSortVisible, setSortVisible] = useState(false);
   const [isColumnModalVisible, setColumnModalVisible] = useState(false);
 
@@ -100,12 +102,15 @@ export default function OrdersScreen({ navigation, route }) {
   );
 
   const allColumns = [
-    { label: 'Order', key: 'id' },
+    { label: 'Order ID', key: 'id' },
     { label: 'Date', key: 'created_at', sortable: true },
-    { label: 'Product', key: 'product' },
-    { label: 'Qty', key: 'quantity', sortable: true },
-    { label: 'Price', key: 'price' },
-    { label: 'Total', key: 'total_price', sortable: true },
+    { label: 'Customer', key: 'customer' },
+    { label: 'Products', key: 'products' }, // Add this
+    { label: 'Items', key: 'items_count', sortable: true },
+    { label: 'Subtotal', key: 'subtotal', sortable: true },
+    { label: 'Coupon', key: 'coupon_amount', sortable: true },
+    { label: 'Delivery', key: 'delivery_charge', sortable: true },
+    { label: 'Total', key: 'total_amount', sortable: true },
     { label: 'Status', key: 'status' },
   ];
 
@@ -134,29 +139,61 @@ export default function OrdersScreen({ navigation, route }) {
     }
   }, [route?.params?.openColumnModalRequest]);
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      setLoading(true);
-
+  const fetchOrders = async () => {
+    try {
       const { data, error } = await supabase.from('orders').select(`
           id,
           created_at,
-          quantity,
-          price,
           status,
-          total_price,
-          products ( id, name )
+          subtotal,
+          coupon_amount,
+          delivery_charge,
+          total_amount,
+          customer:customer_id (
+            id,
+            email,
+            name
+          ),
+          order_items (
+            id,
+            quantity,
+            unit_price,
+            item_total,
+            product:product_id (
+              id,
+              name
+            )
+          )
         `);
 
-      if (!error && data) {
-        setRows(data);
-      } else if (error) {
+      if (error) {
         console.error('[Error fetching orders]:', error);
+        throw error;
       }
+
+      if (data) {
+        setRows(data);
+      }
+    } catch (error) {
+      console.error('[Exception fetching orders]:', error);
+      Alert.alert('Error', 'Failed to fetch orders');
+    }
+  };
+
+  useEffect(() => {
+    const loadOrders = async () => {
+      setLoading(true);
+      await fetchOrders();
       setLoading(false);
     };
 
-    fetchOrders();
+    loadOrders();
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchOrders();
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -223,25 +260,33 @@ export default function OrdersScreen({ navigation, route }) {
           aValue = new Date(a.created_at).getTime();
           bValue = new Date(b.created_at).getTime();
           break;
-        case 'quantity':
-          aValue = Number(a.quantity || 0);
-          bValue = Number(b.quantity || 0);
+        case 'items_count':
+          aValue = Number(a.order_items?.length || 0);
+          bValue = Number(b.order_items?.length || 0);
           break;
-        case 'total_price':
-          aValue = Number(a.total_price || a.price * a.quantity || 0);
-          bValue = Number(b.total_price || b.price * b.quantity || 0);
+        case 'subtotal':
+          aValue = Number(a.subtotal || 0);
+          bValue = Number(b.subtotal || 0);
           break;
-        case 'price':
-          aValue = Number(a.price || 0);
-          bValue = Number(b.price || 0);
+        case 'coupon_amount':
+          aValue = Number(a.coupon_amount || 0);
+          bValue = Number(b.coupon_amount || 0);
+          break;
+        case 'delivery_charge':
+          aValue = Number(a.delivery_charge || 0);
+          bValue = Number(b.delivery_charge || 0);
+          break;
+        case 'total_amount':
+          aValue = Number(a.total_amount || 0);
+          bValue = Number(b.total_amount || 0);
           break;
         case 'status':
           aValue = (a.status || '').toLowerCase();
           bValue = (b.status || '').toLowerCase();
           break;
-        case 'product':
-          aValue = (a.products?.name || '').toLowerCase();
-          bValue = (b.products?.name || '').toLowerCase();
+        case 'customer':
+          aValue = (a.customer?.name || a.customer?.email || '').toLowerCase();
+          bValue = (b.customer?.name || b.customer?.email || '').toLowerCase();
           break;
         case 'id':
           aValue = a.id || '';
@@ -277,20 +322,32 @@ export default function OrdersScreen({ navigation, route }) {
   }, []);
 
   const { filteredHeaders, widthArr, tableRows, needsScroll } = useMemo(() => {
-    const to2 = n => Number(n ?? 0);
+    const to2 = n => Number(n ?? 0).toFixed(2);
 
-    const tableRows = sortedRows.map(r => ({
-      id: (r.id || '').slice(0, 8),
-      fullId: r.id,
-      created_at: new Date(r.created_at).toLocaleDateString(),
-      product: r?.products?.name ?? '—',
-      quantity: String(r.quantity ?? 0),
-      price: to2(r.price),
-      total_price: to2(
-        r.total_price ?? Number(r.price ?? 0) * Number(r.quantity ?? 0),
-      ),
-      status: r.status ?? 'pending',
-    }));
+    const tableRows = sortedRows.map(r => {
+      // Get all product details from order_items
+      const productsList =
+        r.order_items?.map(item => ({
+          name: item.product?.name || 'Unknown',
+          quantity: item.quantity || 1,
+        })) || [];
+
+      console.log('Created productsList:', productsList); // Add this log
+
+      return {
+        id: (r.id || '').slice(0, 8),
+        fullId: r.id,
+        created_at: new Date(r.created_at).toLocaleDateString(),
+        customer: r.customer?.name || r.customer?.email || '—',
+        products: productsList, // This should be an array
+        items_count: String(r.order_items?.length || 0),
+        subtotal: `₹${to2(r.subtotal)}`,
+        coupon_amount: r.coupon_amount > 0 ? `-₹${to2(r.coupon_amount)}` : '—',
+        delivery_charge: `₹${to2(r.delivery_charge)}`,
+        total_amount: `₹${to2(r.total_amount)}`,
+        status: r.status ?? 'pending',
+      };
+    });
 
     const filteredHeaders = allColumns.filter(c =>
       visibleColumns.includes(c.key),
@@ -311,56 +368,28 @@ export default function OrdersScreen({ navigation, route }) {
   const handleHeaderPress = useCallback(
     key => {
       const isCurrentColumn = sortConfig.column === key;
-
       const isAtDefault =
         sortConfig.column === 'created_at' &&
         sortConfig.ascending === false &&
         sortKey === 'CREATED_DESC';
 
       if (!isCurrentColumn) {
-        let newSortKey;
-        switch (key) {
-          case 'created_at':
-            newSortKey = 'CREATED_ASC';
-            break;
-          case 'quantity':
-            newSortKey = 'QTY_ASC';
-            break;
-          case 'total_price':
-            newSortKey = 'TOTAL_ASC';
-            break;
-          default:
-            return;
-        }
-        applySort(newSortKey);
+        // First click on different column - sort ascending
+        applySort(`${key.toUpperCase()}_ASC`);
+      } else if (isAtDefault && key === 'created_at') {
+        // Second click on created_at at default - sort ascending
+        applySort('CREATED_ASC');
+      } else if (sortConfig.ascending) {
+        // Third click - toggle to descending
+        applySort(`${key.toUpperCase()}_DESC`);
       } else {
-        if (key === 'created_at' && isAtDefault) {
-          applySort('CREATED_ASC');
-        } else if (sortConfig.ascending) {
-          let newSortKey;
-          switch (key) {
-            case 'created_at':
-              newSortKey = 'CREATED_DESC';
-              break;
-            case 'quantity':
-              newSortKey = 'QTY_DESC';
-              break;
-            case 'total_price':
-              newSortKey = 'TOTAL_DESC';
-              break;
-            default:
-              return;
-          }
-          applySort(newSortKey);
-        } else {
-          resetSort();
-        }
+        // Fourth click - reset to default
+        resetSort();
       }
     },
     [sortConfig.column, sortConfig.ascending, sortKey, applySort, resetSort],
   );
 
-  // ✅ Add useCallback for sort icon render
   const renderSortIcon = key => {
     if (sortConfig.column !== key) return null;
 
@@ -400,6 +429,15 @@ export default function OrdersScreen({ navigation, route }) {
       <ScrollView
         style={styles.verticalScroll}
         contentContainerStyle={styles.verticalScrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#4fc3f7', '#5fd4f7']}
+            tintColor="#4fc3f7"
+            progressBackgroundColor="#353F54"
+          />
+        }
       >
         <ScrollView
           ref={horizontalScrollRef}
@@ -453,6 +491,15 @@ export default function OrdersScreen({ navigation, route }) {
                           backgroundColor={config.backgroundColor}
                           onStatusChange={handleStatusChange}
                           orderId={rowData.fullId}
+                        />
+                      );
+                    }
+
+                    if (h.key === 'products') {
+                      return (
+                        <ProductsMenu
+                          products={value}
+                          itemCount={Number(rowData.items_count)}
                         />
                       );
                     }

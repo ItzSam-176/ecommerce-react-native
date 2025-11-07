@@ -21,6 +21,7 @@ import {
   StatusBar,
   Platform,
   Keyboard,
+  RefreshControl,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -47,6 +48,7 @@ export default function Home({ navigation, route }) {
   const searchInputRef = useRef(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const [showCategoryChips, setShowCategoryChips] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); // Add this
 
   // ✅ REFACTORED: Animated search states (removed searchResults and isSearchLoading)
   const [isSearchActive, setIsSearchActive] = useState(false);
@@ -220,16 +222,24 @@ export default function Home({ navigation, route }) {
     setVisibleColumns(prev => prev ?? []);
   }, [category]);
 
-  const catMap = useMemo(() => {
-    const map = new Map();
-    for (const c of category ?? []) {
-      const id = String(c.id ?? c.category_id ?? c.slug ?? '');
-      if (!id) continue;
-      const name = c.name ?? c.title ?? c.label ?? 'Others';
-      map.set(id, name);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+
+    try {
+      // Refresh all data sources
+      await Promise.all([
+        fetchProducts(true),
+        fetchCategories(true),
+        getCart(),
+        getWishlist(),
+      ]);
+    } catch (error) {
+      console.error('Refresh error:', error);
+      showCustomAlert('Error', 'Failed to refresh data', 'error');
+    } finally {
+      setRefreshing(false);
     }
-    return map;
-  }, [category]);
+  }, [fetchProducts, fetchCategories, getCart, getWishlist, showCustomAlert]);
 
   const addToCartLocal = useCallback(
     async p => {
@@ -393,19 +403,13 @@ export default function Home({ navigation, route }) {
       return (
         <View style={styles.searchProductCardWrapper}>
           <ProductCard
-            id={item.id}
             name={item.name}
             description={item.description}
             price={item.price}
             imageUri={imageUri}
             currencySymbol="₹"
             isFavorite={item.isFavorite}
-            inCart={item.inCart}
-            cartQuantity={item.cartQuantity}
-            disabledAdd={item.disabledAdd}
-            loadingAdd={item.loadingAdd}
             onToggleFavorite={() => toggleWishlistLocal(item.raw || item)}
-            onAddToCart={() => addToCartLocal(item.raw || item)}
             onPress={() => {
               closeSearch();
               onPressProduct(item);
@@ -425,7 +429,7 @@ export default function Home({ navigation, route }) {
           style={styles.backgroundImage}
           resizeMode="cover"
         >
-          <View style={styles.filterSection}>
+          <View style={[styles.filterSection, { backgroundColor: '#353F54' }]}>
             <View style={styles.filterRow}>
               <ShimmerPlaceholder
                 LinearGradient={LinearGradient}
@@ -692,19 +696,13 @@ export default function Home({ navigation, route }) {
                 renderItem={({ item }) => (
                   <View style={styles.productCardWrapper}>
                     <ProductCard
-                      id={item.id}
                       name={item.name}
                       description={item.description}
                       price={item.price}
                       imageUri={item.imageUri}
                       currencySymbol="₹"
                       isFavorite={item.isFavorite}
-                      inCart={item.inCart}
-                      cartQuantity={item.cartQuantity}
-                      disabledAdd={item.disabledAdd}
-                      loadingAdd={item.loadingAdd}
                       onToggleFavorite={() => toggleWishlistLocal(item)}
-                      onAddToCart={() => addToCartLocal(item)}
                       onPress={() => onPressProduct(item)}
                     />
                   </View>
@@ -716,6 +714,15 @@ export default function Home({ navigation, route }) {
                 onEndReachedThreshold={0.5}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={['#4fc3f7', '#5fd4f7']} // Android colors
+                    tintColor="#4fc3f7" // iOS color
+                    progressBackgroundColor="#353F54" // Android background
+                  />
+                }
               />
             )}
           </>

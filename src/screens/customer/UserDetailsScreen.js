@@ -100,7 +100,6 @@ const UserDetailsScreen = ({ navigation }) => {
       if (addressesError) throw addressesError;
       setAddresses(addressesData || []);
     } catch (error) {
-      console.error('[ERROR] Load user data:', error);
       showErrorAlert('Error', 'Failed to load profile');
     }
   };
@@ -139,7 +138,6 @@ const UserDetailsScreen = ({ navigation }) => {
       if (error) throw error;
       setShowSuccessAlert(true);
     } catch (error) {
-      console.error('[ERROR] Failed to update profile:', error);
       showError('Error', error.message || 'Failed to update profile');
     } finally {
       setLoading(false);
@@ -267,7 +265,6 @@ const UserDetailsScreen = ({ navigation }) => {
       closeAddressModal();
       setShowSuccessAlert(true);
     } catch (error) {
-      console.error('[ERROR] Save address:', error);
       showError('Error', error.message || 'Failed to save address');
     } finally {
       setLoading(false);
@@ -293,7 +290,6 @@ const UserDetailsScreen = ({ navigation }) => {
       setAddresses(addresses.filter(a => a.id !== addressId));
       setShowSuccessAlert(true);
     } catch (error) {
-      console.error('[ERROR] Delete address:', error);
       showError('Error', 'Failed to delete address');
     } finally {
       setLoading(false);
@@ -328,7 +324,6 @@ const UserDetailsScreen = ({ navigation }) => {
 
       setAddresses(updatedAddresses || []);
     } catch (error) {
-      console.error('[ERROR] Set default address:', error);
       showError('Error', 'Failed to set default address');
     } finally {
       setLoading(false);

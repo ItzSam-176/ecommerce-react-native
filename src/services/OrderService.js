@@ -139,7 +139,7 @@ export class OrderService {
             delivery_charge: delivery_charge,
             total_amount,
             delivery_address_id: deliveryAddressId,
-            status: 'pending',
+            status: 'Pending',
           },
         ])
         .select()

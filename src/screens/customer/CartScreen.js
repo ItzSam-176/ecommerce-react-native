@@ -239,12 +239,38 @@ export default function CartScreen({ navigation, route }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    const res = await getCart();
-    if (!res.success) {
-      showAlert('Error', res.error || 'Failed to load cart', 'error');
+
+    try {
+      // Refresh cart data
+      const cartResult = await getCart();
+      if (!cartResult.success) {
+        showAlert('Error', cartResult.error || 'Failed to load cart', 'error');
+      }
+
+      // Refresh coupons
+      await fetchAllCoupons();
+      if (user?.id) {
+        await checkUsedCoupons(user.id);
+      }
+
+      // Refresh addresses
+      if (user?.id) {
+        await loadAddresses();
+      }
+    } catch (error) {
+      console.error('Refresh error:', error);
+      showAlert('Error', 'Failed to refresh data', 'error');
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
-  }, [getCart]);
+  }, [
+    getCart,
+    fetchAllCoupons,
+    checkUsedCoupons,
+    loadAddresses,
+    user?.id,
+    showAlert,
+  ]);
 
   const loadAddresses = async () => {
     const result = await AddressService.getAddresses(user.id);
@@ -670,7 +696,7 @@ export default function CartScreen({ navigation, route }) {
           contentContainerStyle={[
             styles.listContainer,
             cartData.length === 0 && styles.emptyListContainer,
-            cartData.length > 0 && { paddingBottom: 520 },
+            cartData.length > 0 && { paddingBottom: 420 },
           ]}
           ListEmptyComponent={renderEmptyCart}
           refreshing={refreshing}

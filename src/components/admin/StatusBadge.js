@@ -10,6 +10,7 @@ import {
 import HapticFeedback, {
   HapticFeedbackTypes,
 } from 'react-native-haptic-feedback';
+import CustomAlert from '../informative/CustomAlert';
 
 const StatusBadge = ({
   status,
@@ -19,16 +20,18 @@ const StatusBadge = ({
   onStatusChange,
   orderId,
 }) => {
+  const [alertVisible, setAlertVisible] = React.useState(false);
+  const [selectedStatus, setSelectedStatus] = React.useState(null);
+
   const getAvailableOptions = () => {
     const normalizedStatus = (status || '').toLowerCase();
-    const allOptions = [
-      {
-        id: 'Pending',
-        title: 'Pending',
-        icon: 'alert-circle',
-        color: '#92400E',
-        backgroundColor: '#FEF3C7',
-      },
+
+    // Only allow options if status is pending
+    if (normalizedStatus !== 'pending') {
+      return [];
+    }
+
+    return [
       {
         id: 'Cancelled',
         title: 'Cancelled',
@@ -44,10 +47,6 @@ const StatusBadge = ({
         backgroundColor: '#D1FAE5',
       },
     ];
-
-    return allOptions.filter(
-      option => option.id.toLowerCase() !== normalizedStatus,
-    );
   };
 
   const triggerHapticFeedback = () => {
@@ -61,72 +60,122 @@ const StatusBadge = ({
     triggerHapticFeedback();
   };
 
-  const handleStatusSelect = selectedStatus => {
+  const handleStatusSelect = selectedStatusId => {
     triggerHapticFeedback();
+    setSelectedStatus(selectedStatusId);
+    setAlertVisible(true);
+  };
 
+  const handleConfirmStatus = () => {
     if (onStatusChange && selectedStatus) {
       onStatusChange(orderId, selectedStatus);
     }
+    setAlertVisible(false);
+    setSelectedStatus(null);
+  };
+
+  const handleCancelStatus = () => {
+    setAlertVisible(false);
+    setSelectedStatus(null);
   };
 
   const availableOptions = getAvailableOptions();
 
-  return (
-    <Menu onOpen={handleMenuOpen}>
-      <MenuTrigger
-        triggerOnLongPress={true}
-        customStyles={{
-          triggerTouchable: { underlayColor: 'transparent' },
-        }}
-      >
-        <View style={[styles.badge, { backgroundColor }]}>
-          {icon && (
-            <Ionicons name={icon} size={16} color={color} style={styles.icon} />
-          )}
-          <Text style={[styles.text, { color }]}>{status}</Text>
-        </View>
-      </MenuTrigger>
+  // Disable menu if no options available
+  if (availableOptions.length === 0) {
+    return (
+      <View style={[styles.badge, { backgroundColor }]}>
+        {icon && (
+          <Ionicons name={icon} size={16} color={color} style={styles.icon} />
+        )}
+        <Text style={[styles.text, { color }]}>{status}</Text>
+      </View>
+    );
+  }
 
-      <MenuOptions
-        customStyles={{
-          optionsContainer: {
-            borderRadius: 8,
-            padding: 4,
-            marginTop: 32,
-            marginLeft: 10,
-            width: 120,
-          },
-        }}
-      >
-        {availableOptions.map(option => (
-          <MenuOption
-            key={option.id}
-            onSelect={() => handleStatusSelect(option.id)}
-            customStyles={{
-              optionWrapper: {
-                paddingVertical: 8,
-                paddingHorizontal: 12,
-                borderRadius: 6,
-                marginVertical: 2,
-                backgroundColor: option.backgroundColor,
-              },
-            }}
-          >
-            <View style={styles.menuItem}>
+  return (
+    <>
+      <Menu onOpen={handleMenuOpen}>
+        <MenuTrigger
+          triggerOnLongPress={true}
+          customStyles={{
+            triggerTouchable: { underlayColor: 'transparent' },
+          }}
+        >
+          <View style={[styles.badge, { backgroundColor }]}>
+            {icon && (
               <Ionicons
-                name={option.icon}
+                name={icon}
                 size={16}
-                color={option.color}
-                style={styles.menuIcon}
+                color={color}
+                style={styles.icon}
               />
-              <Text style={[styles.menuText, { color: option.color }]}>
-                {option.title}
-              </Text>
-            </View>
-          </MenuOption>
-        ))}
-      </MenuOptions>
-    </Menu>
+            )}
+            <Text style={[styles.text, { color }]}>{status}</Text>
+          </View>
+        </MenuTrigger>
+
+        <MenuOptions
+          customStyles={{
+            optionsContainer: {
+              borderRadius: 8,
+              padding: 4,
+              marginTop: 32,
+              marginLeft: 10,
+              width: 120,
+            },
+          }}
+        >
+          {availableOptions.map(option => (
+            <MenuOption
+              key={option.id}
+              onSelect={() => handleStatusSelect(option.id)}
+              customStyles={{
+                optionWrapper: {
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 6,
+                  marginVertical: 2,
+                  backgroundColor: option.backgroundColor,
+                },
+              }}
+            >
+              <View style={styles.menuItem}>
+                <Ionicons
+                  name={option.icon}
+                  size={16}
+                  color={option.color}
+                  style={styles.menuIcon}
+                />
+                <Text style={[styles.menuText, { color: option.color }]}>
+                  {option.title}
+                </Text>
+              </View>
+            </MenuOption>
+          ))}
+        </MenuOptions>
+      </Menu>
+
+      <CustomAlert
+        visible={alertVisible}
+        title="Confirm Status Change"
+        message={`Are you sure you want to change status to ${selectedStatus}? This action cannot be reverted.`}
+        type="confirm"
+        buttons={[
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: handleCancelStatus,
+          },
+          {
+            text: 'Confirm',
+            style: 'destructive',
+            onPress: handleConfirmStatus,
+          },
+        ]}
+        onBackdropPress={handleCancelStatus}
+      />
+    </>
   );
 };
 

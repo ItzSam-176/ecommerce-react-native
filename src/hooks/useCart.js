@@ -7,6 +7,7 @@ export const useCart = (
   products = [],
   showCustomAlert = null,
   navigation = null,
+  hideToast = false,
 ) => {
   const { showToast } = useToastify();
 
@@ -112,7 +113,7 @@ export const useCart = (
           });
 
           if (showAlertFlag) {
-            showToast('Added to Cart', ``, 'success');
+            !hideToast && showToast('Added to Cart', ``, 'success');
           }
 
           return { success: true, data: normalizedRow };

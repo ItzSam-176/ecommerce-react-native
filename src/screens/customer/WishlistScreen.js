@@ -36,7 +36,7 @@ export default function WishlistScreen({ navigation }) {
     navigation,
   );
 
-  const { addToCart } = useCart();
+  const { addToCart } = useCart([], null, navigation, true);
 
   // Load wishlist only on first mount
   useFocusEffect(
